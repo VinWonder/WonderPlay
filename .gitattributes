@@ -1,0 +1,16 @@
+# Normalise line endings in the repository (LF), whatever the OS.
+* text=auto
+
+# Files used inside the Linux container / by Render must stay LF everywhere.
+Dockerfile      text eol=lf
+*.sh            text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+*.sql           text eol=lf
+*.py            text eol=lf
+
+# Binary assets
+*.png           binary
+*.jpg           binary
+*.woff          binary
+*.woff2         binary
