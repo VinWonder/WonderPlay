@@ -23,6 +23,16 @@ def test_database_url_normalised_for_render():
     assert not Settings(database_url="postgresql+asyncpg://u:p@localhost:5432/db").db_ssl_enabled
 
 
+def test_neon_urls():
+    direct = Settings(database_url="postgresql://neondb_owner:pw@ep-cool-sun-a1b2c3.eu-central-1.aws.neon.tech/neondb"
+                                   "?sslmode=require&channel_binding=require")
+    assert direct.database_url == "postgresql+asyncpg://neondb_owner:pw@ep-cool-sun-a1b2c3.eu-central-1.aws.neon.tech/neondb"
+    assert direct.db_ssl_enabled and not direct.db_pooled
+    pooled = Settings(database_url="postgresql://u:pw@ep-cool-sun-a1b2c3-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require")
+    assert pooled.db_pooled and pooled.db_ssl_enabled
+    assert "?" not in pooled.database_url
+
+
 def test_tokens(settings):
     tok = auth.make_token()
     assert auth.valid_token(tok)

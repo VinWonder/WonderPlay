@@ -65,12 +65,22 @@ class Settings(BaseSettings):
         for prefix in ("postgres://", "postgresql://"):
             if v.startswith(prefix):
                 v = "postgresql+asyncpg://" + v[len(prefix):]
-        # asyncpg doesn't understand libpq's ?sslmode=...; SSL is handled via db_ssl.
+        # Hosted Postgres URLs (Neon, Render, Supabase...) carry libpq-only options
+        # such as ?sslmode=require&channel_binding=require. asyncpg rejects unknown
+        # options, so drop them all; SSL is handled via db_ssl instead.
         if "?" in v:
-            base, query = v.split("?", 1)
-            kept = [q for q in query.split("&") if q and not q.lower().startswith("sslmode=")]
-            v = base + ("?" + "&".join(kept) if kept else "")
+            v = v.split("?", 1)[0]
         return v
+
+    @property
+    def db_host(self) -> str:
+        return self.database_url.split("@")[-1].split("/")[0].split(":")[0]
+
+    @property
+    def db_pooled(self) -> bool:
+        """Behind a transaction-mode pooler (PgBouncer), e.g. Neon's '-pooler'
+        endpoints: asyncpg's prepared-statement cache must be disabled."""
+        return "-pooler" in self.db_host or "pgbouncer" in self.db_host
 
     @property
     def db_ssl_enabled(self) -> bool:
@@ -79,7 +89,7 @@ class Settings(BaseSettings):
             return True
         if mode in ("false", "0", "no", "disable"):
             return False
-        host = self.database_url.split("@")[-1].split("/")[0].split(":")[0]
+        host = self.db_host
         # Render internal hostnames look like "dpg-xxxx-a" (no dots); external ones are FQDNs.
         return "." in host and host not in ("localhost", "127.0.0.1") and not host.endswith(".internal")
 

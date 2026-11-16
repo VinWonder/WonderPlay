@@ -29,6 +29,10 @@ def get_engine() -> AsyncEngine:
             connect_args={
                 "server_settings": {"search_path": "music, public"},
                 **({"ssl": "require"} if get_settings().db_ssl_enabled else {}),
+                # PgBouncer-style poolers (Neon "-pooler" URLs) can't keep named
+                # prepared statements between transactions.
+                **({"statement_cache_size": 0, "prepared_statement_cache_size": 0}
+                   if get_settings().db_pooled else {}),
             },
         )
     return _engine

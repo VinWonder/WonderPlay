@@ -26,7 +26,8 @@ def _plain_sql(text: str) -> str:
 async def migrate() -> None:
     s = get_settings()
     dsn = s.database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
-    conn = await asyncpg.connect(dsn, ssl="require" if s.db_ssl_enabled else None)
+    conn = await asyncpg.connect(dsn, ssl="require" if s.db_ssl_enabled else None,
+                                 statement_cache_size=0 if s.db_pooled else 100)
     try:
         await conn.execute("CREATE SCHEMA IF NOT EXISTS music")
         await conn.execute("""
@@ -55,10 +56,14 @@ async def migrate() -> None:
             sql = _plain_sql(path.read_text(encoding="utf-8"))
             await conn.execute(sql)    # each file manages its own BEGIN/COMMIT
             await conn.execute("INSERT INTO music.schema_migrations (name) VALUES ($1)", path.name)
-        # make the app role resolve unqualified names in "music" (harmless if already set)
-        user = await conn.fetchval("SELECT current_user")
-        db = await conn.fetchval("SELECT current_database()")
-        await conn.execute(f'ALTER ROLE "{user}" IN DATABASE "{db}" SET search_path = music, public')
+        # Make the role resolve unqualified names in "music" for tools like psql.
+        # Best effort: the app already sets search_path on every connection.
+        try:
+            user = await conn.fetchval("SELECT current_user")
+            db = await conn.fetchval("SELECT current_database()")
+            await conn.execute(f'ALTER ROLE "{user}" IN DATABASE "{db}" SET search_path = music, public')
+        except asyncpg.PostgresError as err:
+            log.info("could not set the role's default search_path (%s); continuing", err)
     finally:
         await conn.close()
     log.info("database schema is up to date")
