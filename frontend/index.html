@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0b10">
+  <meta name="description" content="WonderPlay: your personal, ad-free music and music-video player.">
+  <title>WonderPlay</title>
+  <link rel="icon" href="img/logo.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body class="paused">
+  <a class="skip-link" href="#view">Skip to content</a>
+
+  <!-- Living backdrop: the playing song's artwork, heavily blurred (two layers cross-fade) -->
+  <div class="backdrop" aria-hidden="true">
+    <div class="backdrop-layer" id="backdrop-a"></div>
+    <div class="backdrop-layer" id="backdrop-b"></div>
+    <div class="backdrop-shade"></div>
+  </div>
+
+  <div class="app-shell" id="app">
+    <!-- ================= Sidebar ================= -->
+    <aside class="sidebar glass" aria-label="Main navigation">
+      <a class="brand" href="#/" aria-label="WonderPlay home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="16" fill="currentColor"/>
+          <path d="M8.5 11.5v9M12.5 9v14M16.5 13v6M20.5 10v12M24.5 12.5v7" stroke="#0a0b10" stroke-width="2.6" stroke-linecap="round"/>
+        </svg>
+        <span>WonderPlay</span>
+      </a>
+
+      <div class="side-scroll">
+        <div class="side-label">Menu</div>
+        <nav class="side-nav">
+          <a href="#/" data-nav="home"><i class="bi bi-house"></i><span>Home</span></a>
+          <a href="#/search" data-nav="search"><i class="bi bi-search"></i><span>Search</span></a>
+          <a href="#/videos" data-nav="videos"><i class="bi bi-play-btn"></i><span>Music Videos</span></a>
+          <a href="#/downloads" data-nav="downloads"><i class="bi bi-arrow-down-circle"></i><span>Downloads</span></a>
+        </nav>
+
+        <div class="side-label">Library</div>
+        <nav class="side-nav">
+          <a href="#/liked" data-nav="liked"><i class="bi bi-heart"></i><span>Liked Songs</span><em id="liked-count"></em></a>
+          <a href="#/library/albums" data-nav="library-albums"><i class="bi bi-vinyl"></i><span>Albums</span></a>
+          <a href="#/library/artists" data-nav="library-artists"><i class="bi bi-mic"></i><span>Artists</span></a>
+          <a href="#/library/songs" data-nav="library-songs"><i class="bi bi-music-note-list"></i><span>Songs</span></a>
+        </nav>
+
+        <div class="side-label d-flex align-items-center justify-content-between">
+          <span>Playlists</span>
+          <button class="mini-btn" type="button" data-action="create-playlist" aria-label="Create playlist" title="Create playlist"><i class="bi bi-plus-lg"></i></button>
+        </div>
+        <nav class="side-nav side-playlists" id="sidebar-playlists" aria-label="Playlists"></nav>
+      </div>
+
+      <button class="install-card" type="button" data-action="install-app">
+        <i class="bi bi-download"></i><div><strong>Install WonderPlay</strong><span>Use it like a native app</span></div>
+      </button>
+      <div class="device-card" id="device-card">
+        <i class="bi bi-laptop"></i>
+        <div><strong>This browser</strong><span id="device-status">Ready to play</span></div>
+      </div>
+    </aside>
+
+    <!-- ================= Main ================= -->
+    <main class="main glass" id="main">
+      <header class="topbar" id="topbar">
+        <div class="topbar-nav">
+          <button class="round-btn" type="button" data-action="nav-back" aria-label="Go back"><i class="bi bi-chevron-left"></i></button>
+          <button class="round-btn" type="button" data-action="nav-forward" aria-label="Go forward"><i class="bi bi-chevron-right"></i></button>
+        </div>
+        <form class="search-box" id="search-form" role="search">
+          <i class="bi bi-search"></i>
+          <input id="search-input" type="search" placeholder="Search songs, artists, albums" autocomplete="off"
+                 aria-label="Search your library" enterkeyhint="search">
+          <kbd class="search-kbd">/</kbd>
+          <button type="button" class="search-clear" id="search-clear" aria-label="Clear search" hidden><i class="bi bi-x-lg"></i></button>
+        </form>
+        <div class="topbar-actions">
+          <span class="offline-pill" title="No connection: your downloads still play"><i class="bi bi-wifi-off"></i> Offline</span>
+          <a class="round-btn" href="#/settings" aria-label="Settings" title="Settings"><i class="bi bi-gear"></i></a>
+        </div>
+      </header>
+      <div class="view" id="view" tabindex="-1"></div>
+    </main>
+
+    <!-- ================= Now Playing panel ================= -->
+    <aside class="np-panel glass" id="np-panel" aria-label="Now playing">
+      <div class="np-panel-head">
+        <div class="seg" role="tablist" aria-label="Now playing panel">
+          <button type="button" role="tab" class="seg-btn active" data-np-tab="playing" aria-selected="true">Playing</button>
+          <button type="button" role="tab" class="seg-btn" data-np-tab="lyrics" aria-selected="false">Lyrics</button>
+          <button type="button" role="tab" class="seg-btn" data-np-tab="queue" aria-selected="false">Queue</button>
+        </div>
+        <button class="icon-btn np-panel-close" type="button" data-action="close-np-panel" aria-label="Close panel"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <div class="np-panel-body" id="np-panel-body"></div>
+    </aside>
+
+    <!-- ================= Floating dock (player) ================= -->
+    <footer class="dock glass" id="dock" aria-label="Player">
+      <div class="dock-track">
+        <button class="dock-art-btn" type="button" data-action="open-np-view" aria-label="Open full-screen player">
+          <img id="dock-art" class="dock-art" alt="" src="img/placeholder.svg">
+          <i class="bi bi-arrows-angle-expand"></i>
+        </button>
+        <div class="dock-text">
+          <a id="dock-title" class="dock-title" href="#/">Nothing playing</a>
+          <a id="dock-artist" class="dock-artist" href="#/">Pick a song to start</a>
+        </div>
+        <button class="icon-btn" id="dock-like" type="button" data-action="like-current" aria-label="Save to Liked Songs" disabled>
+          <i class="bi bi-heart"></i></button>
+      </div>
+
+      <div class="dock-center">
+        <div class="transport">
+          <button class="icon-btn" data-ctl="shuffle" type="button" aria-label="Shuffle" aria-pressed="false" title="Shuffle (S)"><i class="bi bi-shuffle"></i></button>
+          <button class="icon-btn" data-ctl="prev" type="button" aria-label="Previous" title="Previous"><i class="bi bi-skip-start-fill"></i></button>
+          <button class="play-btn" data-ctl="play" type="button" aria-label="Play" title="Play (Space)"><i class="bi bi-play-fill"></i></button>
+          <button class="icon-btn" data-ctl="next" type="button" aria-label="Next" title="Next"><i class="bi bi-skip-end-fill"></i></button>
+          <button class="icon-btn" data-ctl="repeat" type="button" aria-label="Repeat: off" data-mode="off" title="Repeat (R)"><i class="bi bi-repeat"></i></button>
+        </div>
+        <div class="progress-row">
+          <span class="time" data-time="cur">0:00</span>
+          <input class="range" data-ctl="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek">
+          <span class="time" data-time="dur">0:00</span>
+        </div>
+      </div>
+
+      <div class="dock-extras">
+        <div class="mode-switch" role="group" aria-label="Playback mode">
+          <button type="button" class="mode-btn active" data-ctl="mode" data-mode="audio" title="Song mode"><i class="bi bi-music-note-beamed"></i><span>Song</span></button>
+          <button type="button" class="mode-btn" data-ctl="mode" data-mode="video" title="Video mode (V)" disabled><i class="bi bi-camera-video"></i><span>Video</span></button>
+        </div>
+        <button class="icon-btn" type="button" data-action="np-tab" data-tab="lyrics" aria-label="Lyrics" title="Lyrics"><i class="bi bi-quote"></i></button>
+        <button class="icon-btn" type="button" data-action="np-tab" data-tab="queue" aria-label="Queue" title="Queue"><i class="bi bi-list-ul"></i></button>
+        <button class="icon-btn" data-ctl="pip" type="button" aria-label="Picture in picture" title="Picture-in-picture" disabled><i class="bi bi-pip"></i></button>
+        <div class="volume">
+          <button class="icon-btn" data-ctl="mute" type="button" aria-label="Mute" title="Mute (M)"><i class="bi bi-volume-up"></i></button>
+          <input class="range" data-ctl="volume" type="range" min="0" max="100" value="80" aria-label="Volume">
+        </div>
+        <button class="icon-btn" type="button" data-action="open-np-view" aria-label="Full-screen player" title="Full-screen player (F)"><i class="bi bi-fullscreen"></i></button>
+      </div>
+      <div class="dock-mini-progress" aria-hidden="true"><span id="dock-mini-bar"></span></div>
+    </footer>
+
+    <!-- ================= Mobile tab bar ================= -->
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+      <a href="#/" data-nav="home"><i class="bi bi-house"></i><span>Home</span></a>
+      <a href="#/search" data-nav="search"><i class="bi bi-search"></i><span>Search</span></a>
+      <a href="#/library" data-nav="library"><i class="bi bi-collection-play"></i><span>Library</span></a>
+      <a href="#/downloads" data-nav="downloads"><i class="bi bi-arrow-down-circle"></i><span>Downloads</span></a>
+    </nav>
+  </div>
+
+  <!-- ================= Full-screen player (Song: art + visualizer, Video: the music video) ================= -->
+  <section class="np-view" id="np-view" aria-label="Full-screen player" hidden>
+    <header class="np-view-head">
+      <button class="round-btn" type="button" data-action="close-np-view" aria-label="Close full-screen player"><i class="bi bi-chevron-down"></i></button>
+      <div class="np-view-context" id="np-view-context">Now playing</div>
+      <div class="mode-switch" role="group" aria-label="Playback mode">
+        <button type="button" class="mode-btn active" data-ctl="mode" data-mode="audio"><i class="bi bi-music-note-beamed"></i><span>Song</span></button>
+        <button type="button" class="mode-btn" data-ctl="mode" data-mode="video" disabled><i class="bi bi-camera-video"></i><span>Video</span></button>
+      </div>
+    </header>
+    <div class="np-view-body">
+      <div class="np-stage" id="np-stage">
+        <div class="stage-art" id="stage-art"><img id="stage-art-img" src="img/placeholder.svg" alt=""></div>
+        <video id="video" playsinline muted preload="auto"></video>
+        <canvas class="viz viz-stage" id="viz-stage" aria-hidden="true"></canvas>
+        <div class="stage-spinner" id="stage-spinner" hidden><span class="spinner-border"></span></div>
+      </div>
+      <div class="np-side">
+        <div class="np-meta">
+          <div class="min-w-0">
+            <h2 class="np-meta-title" id="npv-title">Nothing playing</h2>
+            <div class="np-meta-artist" id="npv-artist"></div>
+          </div>
+          <button class="icon-btn big" type="button" data-action="like-current" data-like-current aria-label="Save to Liked Songs"><i class="bi bi-heart"></i></button>
+        </div>
+        <div class="progress-row np-progress">
+          <span class="time" data-time="cur">0:00</span>
+          <input class="range" data-ctl="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek">
+          <span class="time" data-time="dur">0:00</span>
+        </div>
+        <div class="transport np-transport">
+          <button class="icon-btn" data-ctl="shuffle" type="button" aria-label="Shuffle" aria-pressed="false"><i class="bi bi-shuffle"></i></button>
+          <button class="icon-btn" data-ctl="prev" type="button" aria-label="Previous"><i class="bi bi-skip-start-fill"></i></button>
+          <button class="play-btn" data-ctl="play" type="button" aria-label="Play"><i class="bi bi-play-fill"></i></button>
+          <button class="icon-btn" data-ctl="next" type="button" aria-label="Next"><i class="bi bi-skip-end-fill"></i></button>
+          <button class="icon-btn" data-ctl="repeat" type="button" aria-label="Repeat: off" data-mode="off"><i class="bi bi-repeat"></i></button>
+        </div>
+        <div class="seg np-view-tabs" role="tablist">
+          <button type="button" role="tab" class="seg-btn active" data-npv-tab="lyrics">Lyrics</button>
+          <button type="button" role="tab" class="seg-btn" data-npv-tab="queue">Up next</button>
+        </div>
+        <div class="np-view-panel" id="np-view-panel"></div>
+      </div>
+    </div>
+  </section>
+
+  <audio id="audio" preload="auto" crossorigin="anonymous"></audio>
+
+  <div class="ctx-menu glass" id="ctx-menu" role="menu" hidden></div>
+
+  <div class="modal fade" id="playlist-modal" tabindex="-1" aria-labelledby="playlist-modal-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <form class="modal-content glass-modal" id="playlist-form">
+        <div class="modal-header border-0">
+          <h2 class="modal-title fs-5" id="playlist-modal-title">Create playlist</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="pl-id">
+          <label class="form-label small text-secondary" for="pl-name">Name</label>
+          <input class="form-control wp-input mb-3" id="pl-name" maxlength="200" required placeholder="My playlist #1">
+          <label class="form-label small text-secondary" for="pl-desc">Description</label>
+          <textarea class="form-control wp-input" id="pl-desc" rows="3" placeholder="Add an optional description"></textarea>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="submit" class="pill-btn pill-btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+  <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
