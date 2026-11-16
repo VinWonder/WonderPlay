@@ -1,0 +1,51 @@
+# Render Blueprint: one click creates the web service + PostgreSQL database.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Plans: "starter" is the cheapest plan that supports a persistent disk (keeps
+# album art between deploys) and never sleeps. On the free plan, delete the
+# `disk:` block and set `plan: free` (the app then sleeps after 15 minutes idle
+# and album art is re-downloaded after each deploy).
+
+services:
+  - type: web
+    name: wonderplay
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    # Persistent disks need a paid plan. To keep album art between deploys,
+    # switch to `plan: starter` and add back:
+    #   disk:
+    #     name: wonderplay-data
+    #     mountPath: /var/data
+    #     sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: wonderplay-db
+          property: connectionString
+      - key: APP_PASSWORD
+        sync: false # Render asks you for this when you create the Blueprint
+      - key: SECRET_KEY
+        generateValue: true
+      - key: AUTO_MIGRATE
+        value: "true"
+      - key: SCAN_ON_STARTUP
+        value: "false"
+      - key: YTDLP_JS_RUNTIME
+        value: node
+      - key: YTDLP_PLAYER_CLIENTS
+        value: tv_embedded
+      - key: YTDLP_PLAYER_JS_VARIANT
+        value: actual
+      # Optional: upload a cookies.txt as a Secret File named cookies.txt
+      # (see DEPLOY.md, step 7), then this path points at it.
+      - key: YTDLP_COOKIES_FILE
+        value: /etc/secrets/cookies.txt
+
+databases:
+  - name: wonderplay-db
+    databaseName: wonderplay
+    user: wonderplay
+    plan: free
