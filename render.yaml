@@ -1,10 +1,17 @@
-# Render Blueprint: one click creates the web service + PostgreSQL database.
+# Render Blueprint for WonderPlay.
 # Docs: https://render.com/docs/blueprint-spec
 #
-# Plans: "starter" is the cheapest plan that supports a persistent disk (keeps
-# album art between deploys) and never sleeps. On the free plan, delete the
-# `disk:` block and set `plan: free` (the app then sleeps after 15 minutes idle
-# and album art is re-downloaded after each deploy).
+# The database is hosted on Neon (https://neon.tech, free, no expiry).
+# Render asks for DATABASE_URL and APP_PASSWORD when you apply the Blueprint
+# (or set them later under the service's Environment tab).
+#
+# Plan: "free" sleeps after 15 minutes idle and loses cached album art on each
+# restart. "starter" is always on; with it you can also keep album art on a disk:
+#   plan: starter
+#   disk:
+#     name: wonderplay-data
+#     mountPath: /var/data
+#     sizeGB: 1
 
 services:
   - type: web
@@ -14,19 +21,11 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     autoDeploy: true
-    # Persistent disks need a paid plan. To keep album art between deploys,
-    # switch to `plan: starter` and add back:
-    #   disk:
-    #     name: wonderplay-data
-    #     mountPath: /var/data
-    #     sizeGB: 1
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: wonderplay-db
-          property: connectionString
+        sync: false          # paste your Neon connection string (see DEPLOY.md)
       - key: APP_PASSWORD
-        sync: false # Render asks you for this when you create the Blueprint
+        sync: false          # the password you'll use to sign in
       - key: SECRET_KEY
         generateValue: true
       - key: AUTO_MIGRATE
@@ -40,12 +39,6 @@ services:
       - key: YTDLP_PLAYER_JS_VARIANT
         value: actual
       # Optional: upload a cookies.txt as a Secret File named cookies.txt
-      # (see DEPLOY.md, step 7), then this path points at it.
+      # (see DEPLOY.md, step 8), then this path points at it.
       - key: YTDLP_COOKIES_FILE
         value: /etc/secrets/cookies.txt
-
-databases:
-  - name: wonderplay-db
-    databaseName: wonderplay
-    user: wonderplay
-    plan: free
