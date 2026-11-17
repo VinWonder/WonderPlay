@@ -213,6 +213,38 @@ window.addEventListener('appinstalled', () => {
   toast('WonderPlay is installed');
 });
 
+function installSteps() {
+  const ua = navigator.userAgent;
+  if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
+    return '<p>WonderPlay is already installed and running as an app.</p>';
+  }
+  if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    if (/CriOS|FxiOS|EdgiOS/.test(ua)) {
+      return '<ol><li>On iPhone and iPad, apps can only be installed from <b>Safari</b>. Copy this page\'s address and open it in Safari.</li>'
+        + '<li>Then tap <b>Share</b> <i class="bi bi-box-arrow-up"></i> → <b>Add to Home Screen</b> → <b>Add</b>.</li></ol>';
+    }
+    return '<ol><li>Tap the <b>Share</b> button <i class="bi bi-box-arrow-up"></i> in Safari\'s toolbar.</li>'
+      + '<li>Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>. WonderPlay appears on your home screen.</li></ol>';
+  }
+  if (/SamsungBrowser/.test(ua)) {
+    return '<ol><li>Tap the <b>install icon</b> <i class="bi bi-download"></i> in the address bar (next to the reload button), then <b>Install</b>.</li>'
+      + '<li>No icon? Tap the menu <i class="bi bi-list"></i> → <b>Add page to</b> → <b>Home screen</b>.</li></ol>';
+  }
+  if (/Firefox/.test(ua) && /Android/.test(ua)) {
+    return '<ol><li>Tap the menu <i class="bi bi-three-dots-vertical"></i>.</li><li>Tap <b>Install</b> (or <b>Add to Home screen</b>).</li></ol>';
+  }
+  if (/Android/.test(ua)) {
+    return '<ol><li>Tap the menu <i class="bi bi-three-dots-vertical"></i> at the top right of Chrome.</li>'
+      + '<li>Tap <b>Install app</b> (or <b>Add to Home screen</b> → <b>Install</b>).</li></ol>';
+  }
+  return '<ol><li>Click the <b>install icon</b> <i class="bi bi-download"></i> at the right end of the address bar.</li>'
+    + '<li>Or open the browser menu → <b>Cast, save and share</b> / <b>Apps</b> → <b>Install WonderPlay</b>.</li></ol>';
+}
+
+document.getElementById('install-sheet')?.addEventListener('click', (e) => {
+  if (e.target.id === 'install-sheet') e.currentTarget.hidden = true;   // tap outside closes
+});
+
 // ---------------------------------------------------------------- delegated click handler
 const handlers = {
   async 'play-list'(el) {
@@ -259,11 +291,25 @@ const handlers = {
     if (entry?.tracks.length) await downloads.downloadMany(entry.tracks, el.dataset.label || 'songs');
   },
   async 'install-app'() {
-    if (!installPrompt) { toast('Use your browser menu: "Install app" or "Add to Home Screen"'); return; }
-    installPrompt.prompt();
-    await installPrompt.userChoice;
-    installPrompt = null;
-    document.body.classList.remove('can-install');
+    if (installPrompt) {
+      try {
+        await installPrompt.prompt();          // rejects if the browser refuses to show it
+        await installPrompt.userChoice;
+        installPrompt = null;
+        document.body.classList.remove('can-install');
+        return;
+      } catch {
+        installPrompt = null;   // prompt refused or already used: show the manual steps instead
+      }
+    }
+    // No prompt available (iOS never offers one; Samsung Internet uses its own button): show the steps.
+    document.getElementById('install-steps').innerHTML = installSteps();
+    document.getElementById('install-sheet').hidden = false;
+  },
+  'close-install'() { document.getElementById('install-sheet').hidden = true; },
+  'dismiss-install'(el) {
+    try { localStorage.setItem('wp.installDismissed', '1'); } catch { /* private mode */ }
+    el.closest('.install-promo')?.remove();
   },
   'create-playlist'() { openPlaylistModal(); },
   'nav-back'() { history.back(); },
