@@ -50,13 +50,14 @@ async def test_youtube() -> dict:
     try:
         info = await resolver.extract(TEST_VIDEO)
         ok = bool(resolver.pick_audio(info.get("formats") or [info]))
-        via = " through Cloudflare WARP" if netproxy.proxy_url else ""
-        result = {"ok": ok, "message": f"YouTube playback works{via}." if ok else "YouTube answered but sent no playable audio.",
-                  "seconds": round(time.time() - t, 1)}
+        result = {"ok": ok, "seconds": round(time.time() - t, 1),
+                  "message": f"YouTube playback works ({resolver.route_name(resolver.last_route)})." if ok
+                  else "YouTube answered but sent no playable audio."}
     except resolver.BotCheckError:
         result = {"ok": False, "seconds": round(time.time() - t, 1),
                   "message": "YouTube asks this server to sign in. Add backup cookies (Advanced below)."}
     except resolver.ResolveError as err:
         result = {"ok": False, "seconds": round(time.time() - t, 1), "message": str(err)[:300]}
+    result["attempts"] = resolver.last_attempts
     ytcookies.state["last_test"] = {**result, "at": time.strftime("%Y-%m-%d %H:%M")}
     return result

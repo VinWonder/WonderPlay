@@ -23,7 +23,7 @@ UPSTREAM_CHUNK = 8 * 1024 * 1024  # 8 MiB per upstream request (below googlevide
 _CONTENT_RANGE_RE = re.compile(r"bytes\s+(\d+)-(\d+)/(\d+|\*)", re.IGNORECASE)
 
 # Hop-by-hop or yt-dlp-internal headers that must not be forwarded upstream.
-_SKIP_UPSTREAM = {"host", "range", "accept-encoding", "connection", "content-length"}
+_SKIP_UPSTREAM = {"host", "range", "accept-encoding", "connection", "content-length", "x-wp-via"}
 
 
 class UpstreamExpired(Exception):

@@ -86,7 +86,13 @@ function youtubePanel(yt) {
       <div class="sub">Songs stream from YouTube. Press <b>Test</b> to check that playback works from this server.</div>
       <div class="mb-2">${network}</div>
       ${cookies ? html`<div class="mb-2">${cookies}</div>` : ''}
-      ${test ? html`<div class="small mb-3 ${test.ok ? 'text-success' : 'text-danger'}">Last test: ${test.message}</div>` : ''}
+      ${test ? html`<div class="small mb-2 ${test.ok ? 'text-success' : 'text-danger'}">Last test: ${test.message}</div>` : ''}
+      ${test && test.attempts && test.attempts.length > 1 ? html`
+        <details class="yt-steps mb-3" ${test.ok ? '' : 'open'}>
+          <summary>Connections tried (${test.attempts.length})</summary>
+          <ul class="small muted mb-0">${test.attempts.map((a) => html`
+            <li><b class="${a.ok ? 'text-success' : 'text-danger'}">${a.ok ? '✓' : '✗'}</b> ${a.route}${a.error ? html`: ${a.error}` : ''}</li>`)}</ul>
+        </details>` : ''}
       <button class="pill-btn mb-3" type="button" id="yt-test-top"><i class="bi bi-play-circle"></i> Test</button>
       <details class="yt-steps mb-3" ${test && !test.ok ? 'open' : ''}>
         <summary>Advanced: backup cookies (only if the test keeps failing)</summary>

@@ -59,7 +59,7 @@ async def _fresh_remote(src: dict, *, force: bool = False) -> dict:
 
 @router.get("/api/stream/{source_id}")
 @router.head("/api/stream/{source_id}", include_in_schema=False)
-async def stream(source_id: int, request: Request, http: httpx.AsyncClient = Depends(get_media_http)) -> Response:
+async def stream(source_id: int, request: Request, media_http: httpx.AsyncClient = Depends(get_media_http)) -> Response:
     """Stream a media source. Supports `Range` (206 Partial Content) for
     instant seeking, for both local files and remote (proxied) streams."""
     src = await _load_source(source_id)
@@ -76,6 +76,9 @@ async def stream(source_id: int, request: Request, http: httpx.AsyncClient = Dep
 
     src = await _fresh_remote(src)
     for attempt in range(2):
+        # Resolved without WARP? Then the CDN only accepts us without WARP too.
+        direct = (src["stream_headers"] or {}).get(resolver.VIA_HEADER) == resolver.VIA_DIRECT
+        http = request.app.state.http if direct else media_http
         try:
             return await proxy_stream(
                 request, http, src["cached_stream_url"], src["stream_headers"],

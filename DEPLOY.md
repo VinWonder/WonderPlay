@@ -170,8 +170,11 @@ once, from a computer. They then work for everyone using your WonderPlay:
 5. In WonderPlay: **Settings → YouTube playback → Advanced** → **Choose cookies.txt** → **Save**.
 
 Cookies are stored in your database (they survive restarts) and expire after weeks to months;
-repeat when the test fails again. To turn WARP off, set  in the service's
+repeat when the test fails again. To turn WARP off, set `WARP_PROXY=false` in the service's
 **Environment** tab.
+
+The test also lists every connection it tried (each YouTube client, through WARP and direct).
+WonderPlay remembers the first one that works and uses it for every song after that.
 
 ---
 

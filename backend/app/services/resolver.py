@@ -238,22 +238,80 @@ def clean_metadata(info: dict) -> dict:
 
 # --- extraction -----------------------------------------------------------------------
 
+# Routes: a route is (player client, network). YouTube judges each request by
+# the client it imitates *and* the IP it comes from, so when one combination is
+# refused ("confirm you're not a bot") another often still works. We try them
+# in order and remember the winner, so later songs go straight to it.
+VIA_WARP, VIA_DIRECT = "warp", "direct"
+VIA_HEADER = "X-WP-Via"       # marks stream URLs that must be fetched without WARP
+FALLBACK_CLIENTS = ("android_vr", "web_embedded", "tv_simply", "mweb")
+_PERMANENT = ("private video", "has been removed", "copyright", "members-only",
+              "join this channel", "account associated with this video", "live event will begin")
+_ROUTE_BUDGET_S = 75
+
+Route = tuple  # (client: str | None, via: str)
+
+
+def routes() -> list[Route]:
+    """All routes in preference order; a client of None = yt-dlp's own choice."""
+    s = get_settings()
+    clients: list[str | None] = []
+    if ytcookies.current_path():
+        clients.append(None)                     # signed in: yt-dlp's default clients
+    for c in [c.strip() for c in s.ytdlp_player_clients.split(",")] + list(FALLBACK_CLIENTS):
+        if c and c not in clients:
+            clients.append(c)
+    if None not in clients:
+        clients.append(None)
+    vias = [VIA_WARP, VIA_DIRECT] if netproxy.proxy_url else [VIA_DIRECT]
+    return [(c, v) for v in vias for c in clients]
+
+
+def route_name(route: Route | None) -> str:
+    if not route:
+        return "none"
+    client, via = route
+    return f"{client or 'default'} via {'Cloudflare WARP' if via == VIA_WARP else 'direct connection'}"
+
+
+_preferred: Route | None = None
+last_route: Route | None = None
+last_attempts: list[dict] = []
+
+
+def _route_opts(route: Route) -> dict:
+    client, via = route
+    s = get_settings()
+    args: dict = {}
+    if client:
+        args["player_client"] = [client]
+    if s.ytdlp_player_js_variant:
+        args["player_js_variant"] = [s.ytdlp_player_js_variant]
+    opts = _base_opts(extractor_args={"youtube": args} if args else {})
+    if via == VIA_DIRECT:
+        opts.pop("proxy", None)
+    return opts
+
+
 # Long-lived extractors. yt-dlp keeps YouTube's ~2-3 MB player script in
 # memory per YoutubeDL instance; a fresh instance per song re-downloads it
 # every time (20-70 s on a throttled connection). Instances aren't thread-safe,
 # so each is checked out of a small pool for the duration of one extraction.
+# The pool always serves the preferred route.
 _POOL_SIZE = 2
 _pool: "queue.Queue[yt_dlp.YoutubeDL]" = queue.Queue()
 _pool_created = 0
 _pool_lock = threading.Lock()
-_generation = 0        # bumped when cookies change: pooled extractors are rebuilt
+_generation = 0        # bumped when cookies/network/route change: pooled extractors are rebuilt
 
 
-def reset_pool() -> None:
-    """Drop pooled extractors so the next extraction picks up new cookies."""
-    global _pool_created, _generation
+def reset_pool(*, forget_route: bool = True) -> None:
+    """Drop pooled extractors so the next extraction picks up new settings."""
+    global _pool_created, _generation, _preferred
     with _pool_lock:
         _generation += 1
+        if forget_route:
+            _preferred = None
         while True:
             try:
                 _pool.get_nowait()
@@ -262,18 +320,9 @@ def reset_pool() -> None:
         _pool_created = 0
 
 
-def _youtube_args(fast: bool) -> dict:
-    s = get_settings()
-    args: dict = {}
-    # With cookies, let yt-dlp choose its signed-in clients; the fast client
-    # override is for anonymous use.
-    if fast and not ytcookies.current_path():
-        clients = [c.strip() for c in s.ytdlp_player_clients.split(",") if c.strip()]
-        if clients:
-            args["player_client"] = clients
-    if s.ytdlp_player_js_variant:
-        args["player_js_variant"] = [s.ytdlp_player_js_variant]
-    return {"youtube": args} if args else {}
+def _current_preferred() -> Route:
+    all_routes = routes()
+    return _preferred if _preferred in all_routes else all_routes[0]
 
 
 def _checkout() -> yt_dlp.YoutubeDL:
@@ -285,10 +334,21 @@ def _checkout() -> yt_dlp.YoutubeDL:
     with _pool_lock:
         if _pool_created < _POOL_SIZE:
             _pool_created += 1
-            ydl = yt_dlp.YoutubeDL(_base_opts(extractor_args=_youtube_args(fast=True)))
+            route = _current_preferred()
+            ydl = yt_dlp.YoutubeDL(_route_opts(route))
             ydl._wp_generation = _generation
+            ydl._wp_route = route
             return ydl
     return _pool.get()   # all busy: wait for one
+
+
+def _checkin(ydl: yt_dlp.YoutubeDL) -> None:
+    global _pool_created
+    if getattr(ydl, "_wp_generation", None) == _generation:
+        _pool.put(ydl)
+    else:
+        with _pool_lock:
+            _pool_created = max(0, _pool_created - 1)
 
 
 def _has_direct_formats(info: dict) -> bool:
@@ -296,41 +356,81 @@ def _has_direct_formats(info: dict) -> bool:
                for f in info.get("formats") or [info])
 
 
-def _extract_sync(url: str) -> dict:
-    ydl = _checkout()
-    try:
-        info = ydl.extract_info(url, download=False)
-        if info and info.get("_type") != "playlist" and not _has_direct_formats(info):
-            raise yt_dlp.utils.DownloadError("fast client returned no direct formats")
-    except yt_dlp.utils.DownloadError as e:
-        # The fast client can be blocked for some videos: retry once with
-        # yt-dlp's own client selection (slower, but broader).
-        log.info("fast extraction failed for %s (%s); retrying with default clients", url, str(e)[:120])
-        try:
-            with yt_dlp.YoutubeDL(_base_opts(extractor_args=_youtube_args(fast=False))) as slow:
-                info = slow.extract_info(url, download=False)
-        except yt_dlp.utils.DownloadError as e2:
-            msg = str(e2).replace("ERROR: ", "")
-            if ytcookies.is_bot_check(msg):
-                raise BotCheckError(
-                    "YouTube is blocking this server. Add YouTube cookies in Settings → Fix YouTube playback.") from e2
-            raise ResolveError(msg) from e2
-    finally:
-        if getattr(ydl, "_wp_generation", None) == _generation:
-            _pool.put(ydl)
-        else:
-            with _pool_lock:
-                globals()["_pool_created"] = max(0, _pool_created - 1)
-    if not info:
-        raise ResolveError("no information returned")
-    if info.get("_type") == "playlist":
+def _first_entry(info: dict | None) -> dict | None:
+    if info and info.get("_type") == "playlist":
         entries = [e for e in info.get("entries") or [] if e]
-        if not entries:
-            raise ResolveError("playlist is empty")
-        info = entries[0]
+        return entries[0] if entries else None
+    return info
+
+
+def _try(ydl: yt_dlp.YoutubeDL, url: str) -> dict:
+    info = _first_entry(ydl.extract_info(url, download=False))
+    if info is None:
+        raise ResolveError("no information returned")
     if info.get("is_live"):
         raise ResolveError("live streams are not supported")
+    if not _has_direct_formats(info):
+        raise yt_dlp.utils.DownloadError("no direct formats from this client")
     return info
+
+
+def _tag(info: dict, via: str) -> dict:
+    """Stream URLs only work from the IP that resolved them: remember the network."""
+    if via == VIA_DIRECT and netproxy.proxy_url:
+        for f in info.get("formats") or [info]:
+            f["http_headers"] = {**(f.get("http_headers") or {}), VIA_HEADER: VIA_DIRECT}
+    return info
+
+
+def _extract_sync(url: str) -> dict:
+    global _preferred, last_route, last_attempts
+    attempts: list[dict] = []
+    errors: list[str] = []
+    started = time.time()
+    ydl = _checkout()
+    first = getattr(ydl, "_wp_route", None) or _current_preferred()
+    try:
+        info = _try(ydl, url)
+        last_route, last_attempts = first, [{"route": route_name(first), "ok": True}]
+        return _tag(info, first[1])
+    except yt_dlp.utils.DownloadError as e:
+        errors.append(str(e).replace("ERROR: ", ""))
+        attempts.append({"route": route_name(first), "ok": False, "error": errors[-1][:160]})
+    finally:
+        _checkin(ydl)
+
+    if any(p in errors[-1].lower() for p in _PERMANENT):
+        last_attempts = attempts
+        raise ResolveError(errors[-1])
+
+    for route in routes():
+        if route == first:
+            continue
+        if time.time() - started > _ROUTE_BUDGET_S:
+            break
+        log.info("extraction failed for %s on %s; trying %s", url, route_name(first), route_name(route))
+        try:
+            with yt_dlp.YoutubeDL(_route_opts(route)) as other:
+                info = _try(other, url)
+        except yt_dlp.utils.DownloadError as e:
+            errors.append(str(e).replace("ERROR: ", ""))
+            attempts.append({"route": route_name(route), "ok": False, "error": errors[-1][:160]})
+            continue
+        attempts.append({"route": route_name(route), "ok": True})
+        last_route, last_attempts = route, attempts
+        if route != _preferred:
+            log.info("YouTube works on %s; using it from now on", route_name(route))
+            _preferred = route
+            reset_pool(forget_route=False)
+        return _tag(info, route[1])
+
+    last_attempts = attempts
+    for a in attempts:
+        log.warning("YouTube route failed: %s: %s", a["route"], a.get("error"))
+    if any(ytcookies.is_bot_check(m) for m in errors):
+        raise BotCheckError(
+            "YouTube is blocking this server. Add backup cookies in Settings → YouTube playback → Advanced.")
+    raise ResolveError(errors[0] if errors else "extraction failed")
 
 
 async def extract(url: str) -> dict:

@@ -5,7 +5,7 @@
  * img    (wp-img-v1)      : covers + catalogue thumbnails, cache-first
  * media  (wp-media-v1)    : downloaded songs (written by the page), served with Range support
  */
-const VERSION = '2026.11.17-3';
+const VERSION = '2026.11.17-4';
 const SHELL = `wp-shell-${VERSION}`;
 const API = 'wp-api-v1';
 const IMG = 'wp-img-v1';
