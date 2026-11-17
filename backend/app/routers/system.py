@@ -53,9 +53,10 @@ async def test_youtube() -> dict:
         result = {"ok": ok, "seconds": round(time.time() - t, 1),
                   "message": f"YouTube playback works ({resolver.route_name(resolver.last_route)})." if ok
                   else "YouTube answered but sent no playable audio."}
-    except resolver.BotCheckError:
-        result = {"ok": False, "seconds": round(time.time() - t, 1),
-                  "message": "YouTube asks this server to sign in. Add backup cookies (Advanced below)."}
+    except resolver.BotCheckError as err:
+        msg = str(err) if ytcookies.state.get("expired") else (
+            "YouTube asks this server to sign in. Add backup cookies (Advanced below).")
+        result = {"ok": False, "seconds": round(time.time() - t, 1), "message": msg}
     except resolver.ResolveError as err:
         result = {"ok": False, "seconds": round(time.time() - t, 1), "message": str(err)[:300]}
     result["attempts"] = resolver.last_attempts

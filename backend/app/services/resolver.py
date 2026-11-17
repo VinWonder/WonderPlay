@@ -307,6 +307,10 @@ def _route_opts(route: Route) -> dict:
                       no_warnings=False, logger=_Collector())
     if via == VIA_DIRECT:
         opts.pop("proxy", None)
+        if netproxy.proxy_url:
+            # One sign-in seen from two addresses gets cancelled by YouTube:
+            # with WARP up, cookies only ever travel through WARP.
+            opts.pop("cookiefile", None)
     if not _supports_cookies(client):
         # yt-dlp would skip this client if handed cookies; run it signed out instead.
         opts.pop("cookiefile", None)
@@ -444,6 +448,11 @@ def _extract_sync(url: str, budget: float = _ROUTE_BUDGET_S) -> dict:
     try:
         info = _try(ydl, url)
         _warnings(ydl)
+        if (getattr(ydl, "params", None) or {}).get("cookiefile"):
+            try:   # keep YouTube's refreshed session cookies (see ytcookies.sync_rotated)
+                ydl.cookiejar.save()
+            except Exception:  # noqa: BLE001
+                pass
         last_route, last_attempts = first, [{"route": route_name(first), "ok": True}]
         return _tag(info, first[1])
     except yt_dlp.utils.DownloadError as e:
@@ -483,6 +492,9 @@ def _extract_sync(url: str, budget: float = _ROUTE_BUDGET_S) -> dict:
     last_attempts = attempts
     for a in attempts:
         log.warning("YouTube route failed: %s: %s", a["route"], a.get("error"))
+    if any(ytcookies.is_expired(w) for a in attempts for w in a.get("warnings") or []):
+        ytcookies.mark_expired()
+        raise BotCheckError(ytcookies.EXPIRED_MESSAGE)
     if ytcookies.current_path():
         signed_in = [m for m, a in zip(errors, attempts) if not ytcookies.is_bot_check(m)]
         if signed_in:

@@ -66,12 +66,28 @@ async def lifespan(app: FastAPI):
         await resolver.warm_up()
 
     app.state.warmup = asyncio.create_task(network_setup())
+
+    async def cookie_sync():
+        while True:
+            await asyncio.sleep(300)
+            try:
+                if await ytcookies.sync_rotated():
+                    log.info("saved YouTube's refreshed cookies")
+            except Exception as err:  # noqa: BLE001
+                log.info("cookie sync skipped: %s", err)
+
+    app.state.cookie_sync = asyncio.create_task(cookie_sync())
     if s.scan_on_startup:
         scanner.start()  # incremental: unchanged files are skipped, so this is cheap
     log.info("WonderPlay ready on http://%s:%s  (API docs at /docs)", s.host, s.port)
 
     yield
 
+    app.state.cookie_sync.cancel()
+    try:   # free hosting sleeps when idle: keep the newest cookies first
+        await ytcookies.sync_rotated()
+    except Exception:  # noqa: BLE001
+        pass
     if app.state.http_media is not app.state.http:
         await app.state.http_media.aclose()
     await app.state.http.aclose()

@@ -19,14 +19,41 @@ from ..db import execute, fetch_one, get_engine
 
 KEY = "youtube_cookies"
 _path: Path | None = None
-state: dict = {"configured": False, "updated_at": None, "last_test": None}
+state: dict = {"configured": False, "updated_at": None, "last_test": None, "expired": False}
 
 BOT_MARKERS = ("confirm you’re not a bot", "confirm you're not a bot", "sign in to confirm")
+EXPIRED_MARKER = "cookies are no longer valid"
+EXPIRED_MESSAGE = ("Your backup cookies have expired (YouTube cancelled that sign-in). "
+                   "Export a fresh cookies.txt and save it in Settings → YouTube playback → Advanced.")
 
 
 def is_bot_check(message: str) -> bool:
     m = (message or "").lower()
     return any(k in m for k in BOT_MARKERS)
+
+
+def is_expired(message: str) -> bool:
+    return EXPIRED_MARKER in (message or "").lower()
+
+
+def mark_expired() -> None:
+    state["expired"] = True
+
+
+async def sync_rotated() -> bool:
+    """YouTube refreshes its session cookies while they're used; yt-dlp writes
+    the refreshed ones to our temp file. Copy them back to the database, or a
+    restart would bring back the old (soon cancelled) set."""
+    if not _path or not _path.exists() or state.get("expired"):
+        return False
+    text = await asyncio.to_thread(_path.read_text, encoding="utf-8")
+    try:
+        text = validate(text)
+    except ValueError:
+        return False
+    async with get_engine().begin() as conn:
+        res = await execute(conn, "UPDATE app_settings SET value = :v WHERE key = :k AND value <> :v", k=KEY, v=text)
+    return res > 0
 
 
 def current_path() -> str | None:
@@ -77,7 +104,7 @@ async def save(text: str) -> None:
             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
         """, k=KEY, v=clean)
     await asyncio.to_thread(_write, clean)
-    state.update(configured=True, updated_at=datetime.now().astimezone(), last_test=None)
+    state.update(configured=True, updated_at=datetime.now().astimezone(), last_test=None, expired=False)
 
 
 async def clear() -> None:
@@ -87,4 +114,4 @@ async def clear() -> None:
     if _path and _path.exists():
         _path.unlink(missing_ok=True)
     _path = None
-    state.update(configured=False, updated_at=None, last_test=None)
+    state.update(configured=False, updated_at=None, last_test=None, expired=False)

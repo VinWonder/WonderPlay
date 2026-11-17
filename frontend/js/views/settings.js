@@ -78,7 +78,9 @@ function youtubePanel(yt) {
     ? html`<span class="yt-status ok"><i class="bi bi-shield-check"></i> Connected through Cloudflare WARP${net.colo ? ` (${net.colo})` : ''}: no sign-in needed</span>`
     : html`<span class="yt-status"><i class="bi bi-globe"></i> Direct connection${net.error ? ' (WARP unavailable)' : ''}</span>`;
   const cookies = yt.active
-    ? html`<span class="yt-status ok"><i class="bi bi-check-circle-fill"></i> Backup cookies saved${yt.updated_at ? ` · ${new Date(yt.updated_at).toLocaleDateString()}` : ''}</span>`
+    ? (yt.expired
+      ? html`<span class="yt-status text-danger"><i class="bi bi-x-circle-fill"></i> Backup cookies expired: export fresh ones (Advanced below)</span>`
+      : html`<span class="yt-status ok"><i class="bi bi-check-circle-fill"></i> Backup cookies saved${yt.updated_at ? ` · ${new Date(yt.updated_at).toLocaleDateString()}` : ''}</span>`)
     : '';
   return html`
     <section class="panel" id="yt-panel">
@@ -105,8 +107,9 @@ function youtubePanel(yt) {
         <ol>
           <li>Open a <b>private / incognito</b> window and sign in to <b>youtube.com</b>. Use a <b>spare Google account</b>, not your main one.</li>
           <li>Install the browser extension <b>Get cookies.txt LOCALLY</b> and allow it in private windows.</li>
-          <li>While on youtube.com, open the extension and click <b>Export</b> (Netscape format). You get a <code>cookies.txt</code> file.</li>
-          <li>Close the private window <b>without signing out</b>.</li>
+          <li>In the <b>same tab</b>, go to <code>youtube.com/robots.txt</code>. Don't play anything or open other tabs.</li>
+          <li>Open the extension and click <b>Export</b> (Netscape format). You get a <code>cookies.txt</code> file.</li>
+          <li><b>Close the private window right away</b>, without signing out. (Using that sign-in anywhere else makes YouTube cancel it.)</li>
           <li>Choose that file below (or paste its contents), then press <b>Save</b> and <b>Test</b>.</li>
         </ol>
         <p class="small muted mb-0">Cookies expire after a few weeks or months; when songs stop playing, repeat these steps.</p>

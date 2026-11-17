@@ -85,3 +85,28 @@ def test_permanent_errors_do_not_cycle_routes(fake, monkeypatch):
     with pytest.raises(resolver.ResolveError) as e:
         resolver._extract_sync("https://youtu.be/x")
     assert not isinstance(e.value, resolver.BotCheckError) and len(fake.calls) == 1
+
+
+def test_cookies_never_leave_through_the_direct_route(fake, monkeypatch):
+    monkeypatch.setattr(resolver.ytcookies, "current_path", lambda: "/tmp/c.txt")
+    monkeypatch.setattr(resolver, "_base_opts", lambda **kw: {"cookiefile": "/tmp/c.txt",
+                                                             "proxy": netproxy.proxy_url, **kw})
+    assert resolver._route_opts(("tv_samsung", "warp")).get("cookiefile")
+    assert "cookiefile" not in resolver._route_opts(("tv_samsung", "direct"))
+    assert "cookiefile" not in resolver._route_opts(("android_vr", "warp"))   # client can't use cookies
+
+
+def test_expired_cookies_are_reported_as_expired(fake, monkeypatch):
+    from app.services import ytcookies
+    monkeypatch.setitem(ytcookies.state, "expired", False)
+    fake.blocked = {("*", "warp"), ("*", "direct")}
+    real_route_opts = resolver._route_opts
+
+    def opts_with_warning(route):
+        o = real_route_opts(route)
+        o["logger"].warning("[youtube] The provided YouTube account cookies are no longer valid.")
+        return o
+    monkeypatch.setattr(resolver, "_route_opts", opts_with_warning)
+    with pytest.raises(resolver.BotCheckError, match="expired"):
+        resolver._extract_sync("https://youtu.be/x")
+    assert ytcookies.state["expired"] is True
