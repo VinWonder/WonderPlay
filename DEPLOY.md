@@ -149,29 +149,29 @@ You then get a WonderPlay icon, a full-screen app, lock-screen controls, and off
 
 ---
 
-## Step 8 (only if songs won't play): YouTube "not a bot" check
+## Step 8: YouTube playback (automatic)
 
-YouTube is much stricter with cloud servers than with home connections. If searching works but
-**playing fails** with an error like *"Sign in to confirm you're not a bot"*, give the server a
-YouTube sign-in using a cookies file:
+YouTube answers requests from cloud servers like Render's with *"Sign in to confirm you're not
+a bot"*. WonderPlay avoids this automatically: the Docker image starts **Cloudflare WARP**
+(Cloudflare's free VPN) inside the server, and YouTube traffic leaves through Cloudflare's
+network instead of Render's. Nobody has to sign in or export anything, on any device.
 
-1. On your PC, open a **private/incognito** window and sign in to YouTube with a
-   **spare Google account**. Don't use your main account: YouTube can restrict accounts used this way.
+To check it: **Settings → YouTube playback**. It should say *Connected through Cloudflare WARP*;
+press **Test**, which fetches a real song and reports the result.
+
+**If the test still fails** (some networks are blocked even through WARP), add backup cookies
+once, from a computer. They then work for everyone using your WonderPlay:
+
+1. Open a **private/incognito** window and sign in to YouTube with a **spare Google account**.
+   Don't use your main account: YouTube can restrict accounts used this way.
 2. Install the browser extension **"Get cookies.txt LOCALLY"** and allow it in incognito.
-3. While on youtube.com, use the extension to **Export** cookies in Netscape format. This saves a `cookies.txt` file.
-4. Close the private window **without signing out** (signing out invalidates the cookies).
-5. Open WonderPlay → **Settings** (the gear, or tap your **W** avatar on a phone) →
-   **Fix YouTube playback**:
-   - press **Choose cookies.txt** and pick the file (or paste its contents into the box);
-   - press **Save**. WonderPlay tests YouTube right away and tells you whether it works.
+3. While on youtube.com, use the extension to **Export** cookies in Netscape format (`cookies.txt`).
+4. Close the private window **without signing out**.
+5. In WonderPlay: **Settings → YouTube playback → Advanced** → **Choose cookies.txt** → **Save**.
 
-The cookies are stored in your database, so they survive restarts and redeploys, even on the
-free plan. Cookies expire every few weeks to months; when songs start failing again, export
-fresh ones and save them the same way.
-
-*(Alternative for advanced users: upload the file as a Render **Secret File** named
-`cookies.txt`; `render.yaml` already points `YTDLP_COOKIES_FILE` at `/etc/secrets/cookies.txt`.
-Cookies saved in Settings take priority.)*
+Cookies are stored in your database (they survive restarts) and expire after weeks to months;
+repeat when the test fails again. To turn WARP off, set  in the service's
+**Environment** tab.
 
 ---
 

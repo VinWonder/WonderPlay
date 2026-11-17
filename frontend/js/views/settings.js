@@ -73,17 +73,25 @@ const extraSelect = (key, label, hint, value, options) => html`
 
 function youtubePanel(yt) {
   const test = yt.last_test;
-  const status = yt.active
-    ? html`<span class="yt-status ok"><i class="bi bi-check-circle-fill"></i> Cookies saved${yt.updated_at ? ` · ${new Date(yt.updated_at).toLocaleDateString()}` : ''}</span>`
-    : html`<span class="yt-status"><i class="bi bi-exclamation-circle"></i> No cookies: songs may fail with "confirm you're not a bot" on a hosted server</span>`;
+  const net = yt.network || {};
+  const network = net.mode === 'warp'
+    ? html`<span class="yt-status ok"><i class="bi bi-shield-check"></i> Connected through Cloudflare WARP${net.colo ? ` (${net.colo})` : ''}: no sign-in needed</span>`
+    : html`<span class="yt-status"><i class="bi bi-globe"></i> Direct connection${net.error ? ' (WARP unavailable)' : ''}</span>`;
+  const cookies = yt.active
+    ? html`<span class="yt-status ok"><i class="bi bi-check-circle-fill"></i> Backup cookies saved${yt.updated_at ? ` · ${new Date(yt.updated_at).toLocaleDateString()}` : ''}</span>`
+    : '';
   return html`
     <section class="panel" id="yt-panel">
-      <h3>Fix YouTube playback</h3>
-      <div class="sub">YouTube asks cloud servers to sign in. Give WonderPlay the cookies of a YouTube session so songs play.</div>
-      <div class="mb-3">${status}</div>
+      <h3>YouTube playback</h3>
+      <div class="sub">Songs stream from YouTube. Press <b>Test</b> to check that playback works from this server.</div>
+      <div class="mb-2">${network}</div>
+      ${cookies ? html`<div class="mb-2">${cookies}</div>` : ''}
       ${test ? html`<div class="small mb-3 ${test.ok ? 'text-success' : 'text-danger'}">Last test: ${test.message}</div>` : ''}
-      <details class="yt-steps mb-3">
-        <summary>How to get your YouTube cookies (5 minutes, on a computer)</summary>
+      <button class="pill-btn mb-3" type="button" id="yt-test-top"><i class="bi bi-play-circle"></i> Test</button>
+      <details class="yt-steps mb-3" ${test && !test.ok ? 'open' : ''}>
+        <summary>Advanced: backup cookies (only if the test keeps failing)</summary>
+        <p class="small muted">Some hosting networks are blocked by YouTube even through WARP. Cookies from a signed-in
+          YouTube session fix that. You only need to do this once for everyone using this WonderPlay.</p>
         <ol>
           <li>Open a <b>private / incognito</b> window and sign in to <b>youtube.com</b>. Use a <b>spare Google account</b>, not your main one.</li>
           <li>Install the browser extension <b>Get cookies.txt LOCALLY</b> and allow it in private windows.</li>
@@ -127,6 +135,7 @@ function wireYoutubePanel(root) {
     e.currentTarget.disabled = false;
   });
   panel.querySelector('#yt-test').addEventListener('click', () => runTest(panel));
+  panel.querySelector('#yt-test-top').addEventListener('click', () => runTest(panel));
   panel.querySelector('#yt-remove')?.addEventListener('click', async () => {
     if (!confirm('Remove the saved YouTube cookies?')) return;
     await api.del('/api/settings/youtube');
@@ -136,7 +145,7 @@ function wireYoutubePanel(root) {
 }
 
 async function runTest(panel) {
-  const btn = panel.querySelector('#yt-test');
+  const btn = panel.querySelector('#yt-test-top');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing…';
   try {

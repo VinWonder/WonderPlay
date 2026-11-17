@@ -6,7 +6,7 @@ import time
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from ..services import resolver, ytcookies
+from ..services import netproxy, resolver, ytcookies
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -18,7 +18,7 @@ class CookiesBody(BaseModel):
 
 
 def _status() -> dict:
-    return {**ytcookies.state, "active": bool(ytcookies.current_path())}
+    return {**ytcookies.state, "active": bool(ytcookies.current_path()), "network": dict(netproxy.status)}
 
 
 @router.get("/youtube")
@@ -50,11 +50,12 @@ async def test_youtube() -> dict:
     try:
         info = await resolver.extract(TEST_VIDEO)
         ok = bool(resolver.pick_audio(info.get("formats") or [info]))
-        result = {"ok": ok, "message": "YouTube playback works." if ok else "YouTube answered but sent no playable audio.",
+        via = " through Cloudflare WARP" if netproxy.proxy_url else ""
+        result = {"ok": ok, "message": f"YouTube playback works{via}." if ok else "YouTube answered but sent no playable audio.",
                   "seconds": round(time.time() - t, 1)}
     except resolver.BotCheckError:
         result = {"ok": False, "seconds": round(time.time() - t, 1),
-                  "message": "YouTube still asks this server to sign in. Export fresh cookies (see the steps) and save them again."}
+                  "message": "YouTube asks this server to sign in. Add backup cookies (Advanced below)."}
     except resolver.ResolveError as err:
         result = {"ok": False, "seconds": round(time.time() - t, 1), "message": str(err)[:300]}
     ytcookies.state["last_test"] = {**result, "at": time.strftime("%Y-%m-%d %H:%M")}
