@@ -32,6 +32,7 @@ function setActiveNav(nav) {
 export async function render() {
   const full = currentPath();
   const [path, qs = ''] = full.split('?');
+  document.body.dataset.route = path.split('/')[1] || 'home';
   const view = document.getElementById('view');
   const main = document.getElementById('main');
 

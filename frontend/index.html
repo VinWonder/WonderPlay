@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0a0b10">
+  <meta name="theme-color" content="#121212">
   <meta name="description" content="WonderPlay: your personal, ad-free music and music-video player.">
   <title>WonderPlay</title>
   <link rel="icon" href="img/logo.svg" type="image/svg+xml">
@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
   <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
   <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/theme.css">
 </head>
 <body class="paused">
   <a class="skip-link" href="#view">Skip to content</a>
@@ -153,10 +154,11 @@
 
     <!-- ================= Mobile tab bar ================= -->
     <nav class="mobile-nav" aria-label="Mobile navigation">
-      <a href="#/" data-nav="home"><i class="bi bi-house"></i><span>Home</span></a>
-      <a href="#/search" data-nav="search"><i class="bi bi-search"></i><span>Search</span></a>
-      <a href="#/library" data-nav="library"><i class="bi bi-collection-play"></i><span>Library</span></a>
-      <a href="#/downloads" data-nav="downloads"><i class="bi bi-arrow-down-circle"></i><span>Downloads</span></a>
+      <a href="#/" data-nav="home"><i class="bi bi-house-door"></i><i class="bi bi-house-door-fill"></i><span>Home</span></a>
+      <a href="#/search" data-nav="search"><i class="bi bi-search"></i><i class="bi bi-search"></i><span>Search</span></a>
+      <a href="#/library" data-nav="library"><i class="bi bi-collection"></i><i class="bi bi-collection-fill"></i><span>Your Library</span></a>
+      <a href="#/downloads" data-nav="downloads"><i class="bi bi-arrow-down-circle"></i><i class="bi bi-arrow-down-circle-fill"></i><span>Downloads</span></a>
+      <button type="button" data-action="create-playlist"><i class="bi bi-plus-lg"></i><span>Create</span></button>
     </nav>
   </div>
 
@@ -228,6 +230,17 @@
           <button type="submit" class="pill-btn pill-btn-primary">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Install sheet: instructions when the browser can't show its own install prompt -->
+  <div class="sheet-backdrop" id="install-sheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="install-title">
+      <div class="sheet-grab"></div>
+      <img src="img/icon-192.png" alt="" width="64" height="64" class="sheet-icon">
+      <h2 id="install-title">Install WonderPlay</h2>
+      <div id="install-steps" class="install-steps"></div>
+      <button class="pill-btn pill-btn-primary w-100" type="button" data-action="close-install">Got it</button>
     </div>
   </div>
 

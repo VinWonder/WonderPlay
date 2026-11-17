@@ -1,52 +1,74 @@
+// Home: Spotify-style — filter chips, quick tiles, Recents, "More like…",
+// radio stations, mixes and recommendations.
 import { api, coverUrl } from '../api.js';
 import { store } from '../store.js';
 import {
-  albumCard, catalogAlbumCard, catalogArtistCard, catalogPlaylistCard, fmtTime, greeting, hero, html, markPlaying, mount,
-  playlistCard, plural, registerList, shelf, trackCard, trackTable, videoCard,
+  albumCard, artUrl, catalogAlbumCard, catalogArtistCard, catalogPlaylistCard, greeting, hero, html, markPlaying,
+  mount, playlistCard, plural, registerList, shelf, trackCard, trackTable, videoCard,
 } from '../ui.js';
 
-/** Stable hue per genre name so tiles keep their colour. */
+/** Stable hue per name so tiles/stations keep their colour. */
 export function hueOf(name) {
   let h = 0;
   for (const ch of String(name).toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return h;
 }
 
-function onboarding() {
+const CHIPS = [['all', 'All'], ['music', 'Music'], ['videos', 'Videos']];
+
+function homeHead() {
   return html`
-    <h1 class="page-title">${greeting()}</h1>
-    <section class="spotlight">
-      <div class="spotlight-bg" style="background:radial-gradient(circle at 30% 30%, rgba(var(--accent-rgb),.55), transparent 60%), #151826"></div>
-      <div class="spotlight-text">
-        <div class="eyebrow">Let's get started</div>
-        <h2 class="spotlight-title">Your music, your way.</h2>
-        <div class="spotlight-meta muted">No ads, no limits. Search any song, or bring your own files.</div>
-        <div class="spotlight-actions"><a class="pill-btn pill-btn-primary" href="#/search"><i class="bi bi-search"></i> Search all music</a></div>
+    <div class="home-head">
+      <a class="home-avatar" href="#/settings" aria-label="Settings">W</a>
+      <div class="chips" role="tablist" aria-label="Filter">
+        ${CHIPS.map(([k, label], i) => html`<button type="button" class="chip ${i === 0 ? 'active' : ''}" data-filter="${k}"
+          role="tab" aria-selected="${i === 0 ? 'true' : 'false'}">${label}</button>`)}
+        <a class="chip" href="#/downloads">Downloaded</a>
       </div>
-    </section>
-    <div class="onboard">
-      <a href="#/settings"><i class="bi bi-folder2-open"></i><h3>Add a music folder</h3>
-        <p>Point WonderPlay at the folders on this computer that hold your MP3, FLAC, M4A or MP4 files.</p></a>
-      <a href="#/search"><i class="bi bi-search"></i><h3>Play anything</h3>
-        <p>Search millions of songs, albums and music videos. Like a song to save it to your library.</p></a>
-      <a href="#/library/playlists"><i class="bi bi-music-note-list"></i><h3>Build a playlist</h3>
-        <p>Collect your favourites into playlists and keep them on hand for offline listening.</p></a>
-    </div>
-    ${recsPlaceholder()}`;
+    </div>`;
 }
 
-// ---------------------------------------------------------------- recommendations
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+function installCard() {
+  let dismissed = false;
+  try { dismissed = !!localStorage.getItem('wp.installDismissed'); } catch { /* private mode */ }
+  if (isStandalone() || dismissed) return '';
+  return html`
+    <div class="install-promo">
+      <img src="img/icon-192.png" alt="" width="44" height="44">
+      <div class="min-w-0"><strong>Get the WonderPlay app</strong><span>Full screen, lock-screen controls, offline music</span></div>
+      <button class="pill-btn pill-btn-primary" type="button" data-action="install-app">Install</button>
+      <button class="icon-btn" type="button" data-action="dismiss-install" aria-label="Dismiss"><i class="bi bi-x-lg"></i></button>
+    </div>`;
+}
+
+// ---------------------------------------------------------------- recommendations (YouTube Music)
 function recsPlaceholder() {
-  return html`<div id="recs" class="mt-4">
-    ${[1, 2].map(() => html`<section class="section"><div class="skel skel-line" style="width:240px;height:22px"></div>
+  return html`<div id="recs" data-kind="music">
+    ${[1, 2].map(() => html`<section class="section"><div class="skel skel-line" style="width:220px;height:22px"></div>
       <div class="shelf mt-3">${Array.from({ length: 6 }, () => html`<div><div class="skel skel-card"></div>
         <div class="skel skel-line" style="width:70%"></div></div>`)}</div></section>`)}</div>`;
+}
+
+function shelfWithHead(head, items) {
+  if (!items?.length) return '';
+  return html`<section class="section">${head}<div class="shelf">${items}</div></section>`;
 }
 
 function recSection(sec) {
   if (sec.kind === 'tracks') {
     const list = registerList(sec.tracks, { type: 'radio' });
-    return shelf(sec.title, sec.tracks.map((t, i) => trackCard(t, list, i)));
+    const cards = sec.tracks.map((t, i) => trackCard(t, list, i));
+    // "More from X" / "Because you listened to X": Spotify-style header with a picture
+    const m = /^(More from|Because you listened to) (.+)$/.exec(sec.title);
+    if (m) {
+      const pic = sec.tracks[0];
+      return shelfWithHead(html`<div class="shelf-artist-head">
+          <img src="${artUrl(pic)}" alt="" loading="lazy">
+          <div><small>${m[1] === 'More from' ? 'More like' : 'Because you listened to'}</small><strong>${m[2]}</strong></div></div>`, cards);
+    }
+    return shelf(sec.title, cards);
   }
   if (sec.kind === 'albums') return shelf(sec.title, sec.albums.map(catalogAlbumCard));
   if (sec.kind === 'playlists') return shelf(sec.title, sec.playlists.map(catalogPlaylistCard));
@@ -69,55 +91,46 @@ function loadRecs(root, ctx) {
     });
 }
 
-function spotlight(t, recent, more) {
-  // Queue the featured song first, then the rest of the shelf, so Next keeps playing.
-  const list = registerList([t, ...more.filter((x) => x.id !== t.id)], { type: 'library' });
-  const meta = [];
-  if (t.album_title && t.album_title !== t.title) meta.push(html`<span class="dot"></span><a href="#/album/${t.album_id}">${t.album_title}</a>`);
-  if (t.play_count) meta.push(html`<span class="dot"></span><span class="muted">${plural(t.play_count, 'play')}</span>`);
-  return html`
-    <section class="spotlight">
-      <div class="spotlight-bg" style="background-image:url('${coverUrl(t.cover_path, null)}')"></div>
-      <div class="spotlight-text">
-        <div class="eyebrow">${recent ? 'Jump back in' : 'New in your library'}</div>
-        <h2 class="spotlight-title" title="${t.title}">${t.title}</h2>
-        <div class="spotlight-meta">
-          <strong>${t.artist_id ? html`<a href="#/artist/${t.artist_id}">${t.artist_name}</a>` : t.artist_name || 'Unknown artist'}</strong>${meta}
+// ---------------------------------------------------------------- radio stations (one per recent artist)
+function stations(tracks) {
+  const seen = new Set();
+  const seeds = [];
+  for (const t of tracks) {
+    const key = (t.artist_name || '').toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    seeds.push(t);
+    if (seeds.length >= 8) break;
+  }
+  if (!seeds.length) return '';
+  const list = registerList(seeds, { type: 'radio' });
+  const byArtist = (name) => tracks.filter((x) => x.artist_name === name && x.cover_path);
+  const cards = seeds.map((t, i) => {
+    const pics = [t, ...byArtist(t.artist_name).filter((x) => x.id !== t.id)].slice(0, 2);
+    return html`
+      <div class="card-tile" data-action="radio-list" data-list="${list}" data-index="${i}" role="button" tabindex="0"
+           aria-label="Start ${t.artist_name} radio">
+        <div class="station-art" style="--h:${hueOf(t.artist_name)}">
+          <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="currentColor"/>
+            <path d="M8.5 11.5v9M12.5 9v14M16.5 13v6M20.5 10v12M24.5 12.5v7" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>
+          <span class="tag">RADIO</span>
+          <div class="faces">${pics.map((p) => html`<img src="${artUrl(p)}" alt="" loading="lazy">`)}</div>
+          <span class="name">${t.artist_name}</span>
         </div>
-        <div class="spotlight-actions">
-          <button class="pill-btn pill-btn-primary" type="button" data-action="play-list" data-list="${list}" data-index="0">
-            <i class="bi bi-play-fill"></i> Listen now</button>
-          ${t.has_video ? html`<button class="pill-btn" type="button" data-action="play-list" data-mode="video" data-list="${list}" data-index="0">
-            <i class="bi bi-camera-video"></i> Watch video</button>` : ''}
-          <button class="circle-btn ${t.is_favorite ? 'liked' : ''}" type="button" data-action="like" data-track-id="${t.id}" data-like-id="${t.id}"
-            aria-label="${t.is_favorite ? 'Remove from Liked Songs' : 'Save to Liked Songs'}"><i class="bi ${t.is_favorite ? 'bi-heart-fill' : 'bi-heart'}"></i></button>
-        </div>
-      </div>
-      <div class="spotlight-art d-none d-sm-block"><img src="${coverUrl(t.cover_path, null)}" alt=""></div>
-    </section>`;
+        <span class="card-title">${t.artist_name} Radio</span>
+        <div class="card-sub">Based on ${t.title}</div>
+      </div>`;
+  });
+  return shelf('Recommended stations', cards);
 }
 
-function chartList(tracks) {
-  const list = registerList(tracks, { type: 'library' });
-  return html`<div class="chart-list">${tracks.map((t, i) => html`
-    <div class="chart-item" data-action="play-list" data-list="${list}" data-index="${i}" data-track-id="${t.id}" role="button" tabindex="0">
-      <span class="rank">${String(i + 1).padStart(2, '0')}</span>
-      <img src="${coverUrl(t.cover_path)}" alt="" loading="lazy">
-      <div class="ti"><strong>${t.title}</strong><span>${t.artist_name || ''}</span></div>
-      <span class="dur">${fmtTime(t.duration_ms)}</span>
-      <button class="mini-play" type="button" data-action="play-list" data-list="${list}" data-index="${i}" aria-label="Play ${t.title}">
-        <i class="bi bi-play-fill"></i></button>
-    </div>`)}</div>`;
-}
-
+// ---------------------------------------------------------------- page
 export async function homeView({ signal }) {
   const d = await api.get('/api/home', null, { signal });
-  if (!d.recently_added.length && !d.recently_played.length) return { title: 'Home', html: onboarding(), mount: loadRecs };
-
-  const featured = d.recently_played[0] || d.recently_added[0];
+  const played = d.recently_played;
   const added = d.recently_added;
 
-  // Quick picks: Liked Songs, playlists, then recent songs (Spotify-style tiles).
+  // Quick tiles: Liked Songs, playlists, recent songs (2 x 4 like Spotify)
   const quick = [];
   if (store.likedCount) {
     quick.push(html`<a class="quick-tile" href="#/liked"><span class="lib-art liked-art"><i class="bi bi-heart-fill"></i></span>
@@ -129,54 +142,58 @@ export async function homeView({ signal }) {
       <span class="t">${p.name}</span>
       <button class="fab-play" type="button" data-action="play-playlist" data-id="${p.id}" aria-label="Play ${p.name}"><i class="bi bi-play-fill"></i></button></a>`);
   }
-  const recentList = registerList(d.recently_played, { type: 'library' });
-  d.recently_played.slice(0, Math.max(0, 6 - quick.length)).forEach((t, i) => {
+  const recentList = registerList(played, { type: 'library' });
+  played.slice(0, Math.max(0, 8 - quick.length)).forEach((t, i) => {
     quick.push(html`<div class="quick-tile" role="button" tabindex="0" data-action="play-list" data-list="${recentList}" data-index="${i}">
       <img src="${coverUrl(t.cover_path)}" alt=""><span class="t">${t.title}</span>
       <button class="fab-play" type="button" data-action="play-list" data-list="${recentList}" data-index="${i}" aria-label="Play ${t.title}"><i class="bi bi-play-fill"></i></button></div>`);
   });
 
-  const charts = (d.most_played.length >= 3 ? d.most_played : (d.recently_added.length ? d.recently_added : d.recently_played)).slice(0, 6);
-  const addedList = registerList(d.recently_added);
-  const videoList = registerList(d.music_videos);
+  const recentCards = registerList(played, { type: 'library' });
+  const addedList = registerList(added, { type: 'library' });
+  const videoList = registerList(d.music_videos, { type: 'library' });
+  const seedTracks = [...played, ...added];
 
   return {
     title: 'Home',
-    mount: loadRecs,
+    mount(root, ctx) {
+      loadRecs(root, ctx);
+      // filter chips: All / Music / Videos
+      root.querySelector('.home-head .chips')?.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-filter]');
+        if (!chip) return;
+        const f = chip.dataset.filter;
+        root.querySelectorAll('[data-filter]').forEach((c) => {
+          c.classList.toggle('active', c === chip);
+          c.setAttribute('aria-selected', c === chip ? 'true' : 'false');
+        });
+        root.querySelectorAll('[data-kind]').forEach((sec) => {
+          sec.hidden = f !== 'all' && sec.dataset.kind !== f;
+        });
+      });
+    },
     html: html`
-      <h1 class="page-title">${greeting()}</h1>
-      ${spotlight(featured, !!d.recently_played.length, [...d.recently_played, ...d.recently_added])}
-      ${quick.length ? html`<div class="quick-grid">${quick}</div>` : ''}
-      ${recsPlaceholder()}
-
-      <div class="panel-grid">
-        <section class="card-panel">
-          <div class="section-head"><h2 class="section-title">${d.most_played.length >= 3 ? 'Top charts' : 'Fresh picks'}</h2>
-            <a class="section-link" href="#/library/songs?sort=${d.most_played.length >= 3 ? 'plays' : 'recent'}">See all</a></div>
-          ${chartList(charts)}
-        </section>
-        <div class="d-flex flex-column gap-3 min-w-0">
-          ${d.top_artists.length ? html`<section class="card-panel">
-            <div class="section-head"><h2 class="section-title">Top artists</h2><a class="section-link" href="#/library/artists">See all</a></div>
-            <div class="avatar-row">${d.top_artists.map((a) => html`
-              <a class="avatar" href="#/artist/${a.id}">
-                <div class="avatar-img"><img src="${coverUrl(a.image_path || a.cover_path)}" alt="" loading="lazy"></div>
-                <strong>${a.name}</strong><small>${a.plays ? plural(a.plays, 'play') : plural(a.track_count, 'song')}</small></a>`)}
-            </div></section>` : ''}
-          ${d.genres.length ? html`<section class="card-panel">
-            <div class="section-head"><h2 class="section-title">Genres</h2></div>
-            <div class="genre-grid">${d.genres.map((g) => html`
-              <a class="genre-tile" href="#/genre/${encodeURIComponent(g.name)}" style="--h:${hueOf(g.name)}">${g.name}
-                <small>${plural(g.track_count, 'song')}</small>
-                ${g.cover_path ? html`<img src="${coverUrl(g.cover_path)}" alt="" loading="lazy">` : ''}</a>`)}
-            </div></section>` : ''}
-        </div>
+      ${homeHead()}
+      <h1 class="page-title home-greeting">${greeting()}</h1>
+      ${installCard()}
+      <div data-kind="music">
+        ${quick.length ? html`<div class="quick-grid">${quick}</div>` : ''}
+        ${shelf('Recents', played.map((t, i) => trackCard(t, recentCards, i)))}
       </div>
-
-      ${shelf('Recently added to your library', added.map((t, i) => trackCard(t, addedList, i)), '#/library/songs')}
-      ${shelf('Music videos', d.music_videos.map((t, i) => videoCard(t, videoList, i)), '#/videos')}
-      ${shelf('Your playlists', store.playlists.slice(0, 12).map(playlistCard), '#/library/playlists')}
-      ${shelf('Albums', d.new_albums.map(albumCard), '#/library/albums')}
+      ${recsPlaceholder()}
+      <div data-kind="music">
+        ${stations(seedTracks)}
+        ${shelf('Jump back in', d.new_albums.map(albumCard), '#/library/albums')}
+        ${d.top_artists.length ? shelf('Your top artists', d.top_artists.map((a) => html`
+          <a class="card-tile" href="#/artist/${a.id}">
+            <div class="card-art round"><img loading="lazy" src="${coverUrl(a.image_path || a.cover_path)}" alt=""></div>
+            <span class="card-title">${a.name}</span><div class="card-sub">Artist</div></a>`), '#/library/artists') : ''}
+        ${shelf('Recently added to your library', added.map((t, i) => trackCard(t, addedList, i)), '#/library/songs')}
+        ${shelf('Your playlists', store.playlists.slice(0, 12).map(playlistCard), '#/library/playlists')}
+      </div>
+      <div data-kind="videos">
+        ${shelf('Music videos', d.music_videos.map((t, i) => videoCard(t, videoList, i)), '#/videos')}
+      </div>
     `,
   };
 }
@@ -199,3 +216,4 @@ export async function genreView({ params, signal }) {
       ${trackTable(r.items, { context: { type: 'library' } })}`,
   };
 }
+

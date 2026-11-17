@@ -5,7 +5,7 @@
  * img    (wp-img-v1)      : covers + catalogue thumbnails, cache-first
  * media  (wp-media-v1)    : downloaded songs (written by the page), served with Range support
  */
-const VERSION = '2026.11.17-1';
+const VERSION = '2026.11.17-2';
 const SHELL = `wp-shell-${VERSION}`;
 const API = 'wp-api-v1';
 const IMG = 'wp-img-v1';
@@ -13,7 +13,7 @@ const MEDIA = 'wp-media-v1';
 const KEEP = new Set([SHELL, API, IMG, MEDIA]);
 
 const SHELL_FILES = [
-  '/', '/index.html', '/manifest.webmanifest', '/css/app.css',
+  '/', '/index.html', '/manifest.webmanifest', '/css/app.css', '/css/theme.css',
   '/vendor/bootstrap/bootstrap.min.css', '/vendor/bootstrap/bootstrap.bundle.min.js',
   '/vendor/bootstrap-icons/bootstrap-icons.min.css', '/vendor/bootstrap-icons/fonts/bootstrap-icons.woff2',
   '/img/logo.svg', '/img/placeholder.svg', '/img/icon-192.png', '/img/icon-512.png',

@@ -16,7 +16,7 @@ const canvases = new Set();
 let style = 'bars';
 let raf = 0;
 let playing = false;
-let colour = '123, 140, 255';
+let colour = '30, 215, 96';
 const peaks = new Float32Array(64);
 
 export const visualizerSupported = () => !IS_IOS && !failed && 'AudioContext' in window;

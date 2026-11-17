@@ -76,7 +76,7 @@ async function applyTheme(track) {
     if (player.current !== track) return;
     applyAccent(rgb);
   }
-  viz.setColour(getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim());
+  viz.setColour(getComputedStyle(document.documentElement).getPropertyValue('--art-rgb').trim());
   setBackdrop(track?.cover_path || track?.thumbnail ? artUrl(track, 300) : null);
 }
 

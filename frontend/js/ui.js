@@ -54,10 +54,15 @@ export function greeting() {
 }
 
 // ---------------------------------------------------------------- ambient colour
-const DEFAULT_AMBIENT = '#4b2f7a';
+const DEFAULT_AMBIENT = '#404040';
 export function setAmbient(color) {
   const ok = typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color);
-  document.documentElement.style.setProperty('--ambient', ok ? color : DEFAULT_AMBIENT);
+  const c = ok ? color : DEFAULT_AMBIENT;
+  document.documentElement.style.setProperty('--ambient', c);
+  const n = parseInt(c.slice(1), 16);
+  // header gradient colour, toned down so white text stays readable
+  const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v * 0.75));
+  document.documentElement.style.setProperty('--hdr-rgb', rgb.join(', '));
 }
 
 // ---------------------------------------------------------------- toasts

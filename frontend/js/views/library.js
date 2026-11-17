@@ -65,18 +65,23 @@ export async function libraryView({ params, query, signal }) {
   return {
     title: 'Your Library',
     html: html`
-      <h1 class="page-title">Your Library</h1>
+      <div class="library-view">
+      <h1 class="page-title"><a class="home-avatar d-md-none" href="#/settings" aria-label="Settings">W</a>
+        <span class="flex-grow-1">Your Library</span>
+        <button class="icon-btn d-md-none" type="button" data-action="create-playlist" aria-label="Create playlist"><i class="bi bi-plus-lg"></i></button></h1>
       <div class="toolbar">
         <div class="chips mb-0" role="tablist">
           ${TABS.map(([k, label]) => html`<a class="chip ${k === tab ? 'active' : ''}" role="tab" href="#/library/${k}"
               aria-selected="${k === tab ? 'true' : 'false'}">${label}</a>`)}
+          <a class="chip" href="#/downloads">Downloaded</a>
         </div>
         <div class="d-flex align-items-center gap-3">
           ${total ? html`<span class="muted small">${total.toLocaleString()} total</span>` : ''}
           ${sortSelect(tab, sort)}
         </div>
       </div>
-      ${body}`,
+      ${body}
+      </div>`,
     mount(root) {
       root.querySelector('#lib-sort')?.addEventListener('change', (e) => navigate(`/library/${tab}?sort=${e.target.value}`));
       const more = root.querySelector('#load-more');

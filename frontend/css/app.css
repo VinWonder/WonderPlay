@@ -18,8 +18,8 @@
   --tint-strong: rgba(255, 255, 255, .15);
   --blur: blur(34px) saturate(150%);
 
-  --accent: #7b8cff;          /* overridden live from album art */
-  --accent-rgb: 123, 140, 255;
+  --accent: #1ed760;
+  --accent-rgb: 30, 215, 96;
   --on-accent: #0b0d1a;
   --danger: #ff6b81;
   --ok: #3ddc97;

@@ -87,14 +87,26 @@ export function extractColor(url) {
   return p;
 }
 
-const DEFAULT = [123, 140, 255];
+
+/** Deep, muted version of a colour: readable white text on top (Spotify's mini player). */
+export function toDark(rgb) {
+  const [h, s] = rgbToHsl(...rgb);
+  return hslToRgb(h, Math.min(s, 0.55) * (s < 0.12 ? 0 : 1), 0.24);
+}
 
 export function applyAccent(rgb) {
-  const a = rgb ? toAccent(rgb) : DEFAULT;
   const root = document.documentElement.style;
-  root.setProperty('--accent', hex(a));
-  root.setProperty('--accent-rgb', a.join(', '));
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', hex(a.map((v) => Math.round(v * 0.18))));
+  if (!rgb) {
+    root.setProperty('--art-rgb', '83, 83, 83');
+    root.setProperty('--art-dark-rgb', '40, 40, 40');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#121212');
+    return null;
+  }
+  const a = toAccent(rgb);
+  const d = toDark(rgb);
+  root.setProperty('--art-rgb', a.join(', '));
+  root.setProperty('--art-dark-rgb', d.join(', '));
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', hex(d));
   return hex(a);
 }
 
