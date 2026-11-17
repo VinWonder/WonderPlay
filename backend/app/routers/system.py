@@ -48,7 +48,7 @@ async def test_youtube() -> dict:
     """Try to fetch a real song's stream from YouTube with the current setup."""
     t = time.time()
     try:
-        info = await resolver.extract(TEST_VIDEO)
+        info = await resolver.extract(TEST_VIDEO, budget=240)
         ok = bool(resolver.pick_audio(info.get("formats") or [info]))
         result = {"ok": ok, "seconds": round(time.time() - t, 1),
                   "message": f"YouTube playback works ({resolver.route_name(resolver.last_route)})." if ok
@@ -59,5 +59,7 @@ async def test_youtube() -> dict:
     except resolver.ResolveError as err:
         result = {"ok": False, "seconds": round(time.time() - t, 1), "message": str(err)[:300]}
     result["attempts"] = resolver.last_attempts
+    if not result["ok"]:
+        result["diagnosis"] = await resolver.diagnose(TEST_VIDEO)
     ytcookies.state["last_test"] = {**result, "at": time.strftime("%Y-%m-%d %H:%M")}
     return result

@@ -1,7 +1,10 @@
 # WonderPlay — production image (used by Render; works on any Docker host).
 #
-# Debian trixie: its Node.js (20.x) is new enough for yt-dlp's YouTube
-# challenge solver, which needs a JavaScript runtime next to Python.
+# yt-dlp solves YouTube's JavaScript challenge with Node.js and needs Node 22+.
+# Debian's package is Node 20, which yt-dlp rejects (songs then fail with
+# "Requested format is not available"), so Node comes from the official image.
+FROM node:24-trixie-slim AS node
+
 FROM python:3.13-slim-trixie
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -10,9 +13,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends nodejs ca-certificates curl \
- && rm -rf /var/lib/apt/lists/* \
- && node --version
+ && apt-get install -y --no-install-recommends ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+RUN node --version
 
 # Cloudflare WARP tools (see docker/start.sh): wgcf registers a free WARP
 # account, wireproxy exposes it as a local SOCKS5 proxy without root.

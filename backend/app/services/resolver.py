@@ -277,6 +277,8 @@ def routes() -> list[Route]:
             clients.append(c)
     if None not in clients:
         clients.append(None)
+    if ytcookies.current_path():
+        clients.sort(key=lambda c: not _supports_cookies(c))     # stable: cookie clients first
     vias = [VIA_WARP, VIA_DIRECT] if netproxy.proxy_url else [VIA_DIRECT]
     return [(c, v) for v in vias for c in clients]
 
@@ -432,7 +434,7 @@ def _tag(info: dict, via: str) -> dict:
     return info
 
 
-def _extract_sync(url: str) -> dict:
+def _extract_sync(url: str, budget: float = _ROUTE_BUDGET_S) -> dict:
     global _preferred, last_route, last_attempts
     attempts: list[dict] = []
     errors: list[str] = []
@@ -458,7 +460,7 @@ def _extract_sync(url: str) -> dict:
     for route in routes():
         if route == first:
             continue
-        if time.time() - started > _ROUTE_BUDGET_S:
+        if time.time() - started > budget:
             break
         log.info("extraction failed for %s on %s; trying %s", url, route_name(first), route_name(route))
         opts = _route_opts(route)
@@ -481,14 +483,61 @@ def _extract_sync(url: str) -> dict:
     last_attempts = attempts
     for a in attempts:
         log.warning("YouTube route failed: %s: %s", a["route"], a.get("error"))
+    if ytcookies.current_path():
+        signed_in = [m for m, a in zip(errors, attempts) if not ytcookies.is_bot_check(m)]
+        if signed_in:
+            raise ResolveError("YouTube accepted the cookies but sent no playable audio: " + signed_in[0][:200])
     if any(ytcookies.is_bot_check(m) for m in errors):
         raise BotCheckError(
             "YouTube is blocking this server. Add backup cookies in Settings → YouTube playback → Advanced.")
     raise ResolveError(errors[0] if errors else "extraction failed")
 
 
-async def extract(url: str) -> dict:
-    return await asyncio.to_thread(_extract_sync, url)
+async def extract(url: str, budget: float = _ROUTE_BUDGET_S) -> dict:
+    return await asyncio.to_thread(_extract_sync, url, budget)
+
+
+_DIAG_KEEP = ("[youtube]", "[debug] [youtube]", "[jsc", "[pot", "[debug] [jsc", "[debug] [pot",
+              "warning", "error", "[debug] yt-dlp version", "[debug] python", "[debug] js", "[debug] proxy",
+              "formats", "cookie", "po token", "sabr", "challenge")
+
+
+class _Trace(_Collector):
+    def debug(self, msg):
+        self.lines.append(str(msg))
+
+    info = debug
+
+    def warning(self, msg):
+        self.lines.append("WARNING: " + str(msg).replace("WARNING: ", ""))
+
+    def error(self, msg):
+        self.lines.append(str(msg))
+
+
+def _diagnose_sync(url: str, route: Route) -> dict:
+    """One verbose extraction on `route`, keeping only the lines that explain
+    what YouTube sent back (formats, tokens, JS challenges, warnings)."""
+    trace = _Trace()
+    opts = _route_opts(route)
+    opts.update(logger=trace, verbose=True, quiet=False, ignore_no_formats_error=True, format=None)
+    formats: list[str] = []
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = _first_entry(ydl.extract_info(url, download=False)) or {}
+        for f in info.get("formats") or []:
+            kind = "audio" if f.get("vcodec") in (None, "none") else ("images" if f.get("ext") == "mhtml" else "video")
+            formats.append(f"{f.get('format_id')} {kind} {f.get('ext')} {f.get('protocol')}")
+    except Exception as err:  # noqa: BLE001 - diagnostics must not raise
+        trace.lines.append(f"EXCEPTION: {type(err).__name__}: {err}")
+    keep = [ln[:300] for ln in trace.lines
+            if any(k in ln.lower() for k in _DIAG_KEEP) and "downloading webpage" not in ln.lower()]
+    return {"route": route_name(route), "formats": formats[:25], "format_count": len(formats), "log": keep[-40:]}
+
+
+async def diagnose(url: str) -> dict:
+    route = next((r for r in routes() if r[0] is not None and _supports_cookies(r[0])), routes()[0])
+    return await asyncio.to_thread(_diagnose_sync, url, route)
 
 
 async def warm_up() -> None:

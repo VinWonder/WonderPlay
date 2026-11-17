@@ -90,6 +90,9 @@ function youtubePanel(yt) {
       ${test && test.attempts && test.attempts.length > 1 ? html`
         <details class="yt-steps mb-3" ${test.ok ? '' : 'open'}>
           <summary>Connections tried (${test.attempts.length})</summary>
+          ${test.diagnosis ? html`<div class="small muted mb-2">Details (${test.diagnosis.route}, ${test.diagnosis.format_count} formats):</div>
+            <pre class="small muted" style="white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto">${
+              [...test.diagnosis.formats, '', ...test.diagnosis.log].join('\n')}</pre>` : ''}
           <ul class="small muted mb-0">${test.attempts.map((a) => html`
             <li><b class="${a.ok ? 'text-success' : 'text-danger'}">${a.ok ? '✓' : '✗'}</b> ${a.route}${a.error ? html`: ${a.error}` : ''}
               ${a.warnings && a.warnings.length ? html`<ul>${a.warnings.map((w) => html`<li>${w}</li>`)}</ul>` : ''}</li>`)}</ul>
