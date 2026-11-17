@@ -32,6 +32,10 @@ services:
         value: "true"
       - key: SCAN_ON_STARTUP
         value: "false"
+      # Route YouTube through Cloudflare WARP (free) to avoid "confirm you're
+      # not a bot" on data-centre IPs. Falls back to direct automatically.
+      - key: WARP_PROXY
+        value: "true"
       - key: YTDLP_JS_RUNTIME
         value: node
       - key: YTDLP_PLAYER_CLIENTS

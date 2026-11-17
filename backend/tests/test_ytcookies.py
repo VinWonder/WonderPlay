@@ -27,3 +27,9 @@ def test_bot_check_detection():
     assert is_bot_check("[youtube] ZxeK4wG-gws: Sign in to confirm you’re not a bot. Use --cookies")
     assert is_bot_check("Sign in to confirm you're not a bot")
     assert not is_bot_check("Video unavailable")
+
+
+def test_parse_cloudflare_trace():
+    from app.services.netproxy import _parse_trace
+    info = _parse_trace("fl=123\nip=104.28.1.2\ncolo=NBO\nwarp=on\n")
+    assert info["warp"] == "on" and info["colo"] == "NBO" and info["ip"] == "104.28.1.2"

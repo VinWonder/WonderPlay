@@ -9,6 +9,12 @@ def get_http(request: Request) -> httpx.AsyncClient:
     return request.app.state.http
 
 
+def get_media_http(request: Request) -> httpx.AsyncClient:
+    """Client for YouTube media: goes through WARP when it is active, because
+    stream URLs only work from the address that resolved them."""
+    return getattr(request.app.state, "http_media", request.app.state.http)
+
+
 def not_found(what: str = "resource") -> HTTPException:
     return HTTPException(status_code=404, detail=f"{what} not found")
 

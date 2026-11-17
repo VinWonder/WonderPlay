@@ -26,7 +26,7 @@ import httpx
 import yt_dlp
 
 from ..config import get_settings
-from . import ytcookies
+from . import netproxy, ytcookies
 
 log = logging.getLogger("sonicvault.resolver")
 
@@ -79,6 +79,8 @@ def _base_opts(**extra) -> dict:
         _writable_cookies(s.ytdlp_cookies_file) if s.ytdlp_cookies_file else None)
     if cookies:
         opts["cookiefile"] = cookies
+    if netproxy.proxy_url:          # Cloudflare WARP on hosted servers
+        opts["proxy"] = netproxy.proxy_url
     if s.ffmpeg_location:
         opts["ffmpeg_location"] = s.ffmpeg_location
     opts.update(extra)

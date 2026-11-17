@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from ..db import execute, fetch_all, fetch_one, get_engine
-from ..deps import get_http, not_found
+from ..deps import get_media_http, not_found
 from ..services import importer, resolver
 from ..services.covers import cover_root, thumb_rel
 from ..services.proxy import UpstreamError, UpstreamExpired, proxy_stream
@@ -59,7 +59,7 @@ async def _fresh_remote(src: dict, *, force: bool = False) -> dict:
 
 @router.get("/api/stream/{source_id}")
 @router.head("/api/stream/{source_id}", include_in_schema=False)
-async def stream(source_id: int, request: Request, http: httpx.AsyncClient = Depends(get_http)) -> Response:
+async def stream(source_id: int, request: Request, http: httpx.AsyncClient = Depends(get_media_http)) -> Response:
     """Stream a media source. Supports `Range` (206 Partial Content) for
     instant seeking, for both local files and remote (proxied) streams."""
     src = await _load_source(source_id)

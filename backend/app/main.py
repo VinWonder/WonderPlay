@@ -21,7 +21,7 @@ from .db import dispose_engine, fetch_val, get_engine
 from . import auth
 from .migrate import migrate
 from .routers import catalog, library, me, playlists, remote, stream, system
-from .services import resolver, ytcookies
+from .services import netproxy, resolver, ytcookies
 from .services.scanner import ensure_env_folders, scanner
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -51,13 +51,29 @@ async def lifespan(app: FastAPI):
         await ytcookies.load()
     except Exception as err:  # noqa: BLE001
         log.info("no saved YouTube cookies loaded: %s", err)
-    app.state.warmup = asyncio.create_task(resolver.warm_up())
+    app.state.http_media = app.state.http      # replaced by a WARP client once verified
+
+    async def network_setup():
+        # In the background so the server answers health checks immediately.
+        await netproxy.init()
+        if netproxy.proxy_url:
+            app.state.http_media = httpx.AsyncClient(
+                proxy=netproxy.proxy_url, follow_redirects=True,
+                timeout=httpx.Timeout(20.0, read=60.0),
+                limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+            )
+            resolver.reset_pool()
+        await resolver.warm_up()
+
+    app.state.warmup = asyncio.create_task(network_setup())
     if s.scan_on_startup:
         scanner.start()  # incremental: unchanged files are skipped, so this is cheap
     log.info("WonderPlay ready on http://%s:%s  (API docs at /docs)", s.host, s.port)
 
     yield
 
+    if app.state.http_media is not app.state.http:
+        await app.state.http_media.aclose()
     await app.state.http.aclose()
     await dispose_engine()
 

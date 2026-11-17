@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     ytdlp_player_js_variant: str = "actual"
     # Optional Netscape cookies.txt for age-restricted / members content.
     ytdlp_cookies_file: str = ""
+    # Outbound proxy for YouTube (set by docker/start.sh when WARP_PROXY=true),
+    # e.g. socks5://127.0.0.1:40000. Verified at startup before it is used.
+    ytdlp_proxy: str = ""
 
     # Run an incremental library scan each time the server starts.
     scan_on_startup: bool = True
