@@ -26,6 +26,7 @@ import httpx
 import yt_dlp
 
 from ..config import get_settings
+from . import ytcookies
 
 log = logging.getLogger("sonicvault.resolver")
 
@@ -35,6 +36,10 @@ _VIDEO_CODEC_PREF = ("avc1", "vp09", "vp9", "av01")
 
 class ResolveError(Exception):
     pass
+
+
+class BotCheckError(ResolveError):
+    """YouTube refused this server ("Sign in to confirm you're not a bot")."""
 
 
 # --- yt-dlp options -----------------------------------------------------------
@@ -69,7 +74,10 @@ def _base_opts(**extra) -> dict:
         "format": "bestaudio/best",   # just needs to succeed; we pick formats ourselves
         "js_runtimes": {s.ytdlp_js_runtime: {}} if s.ytdlp_js_runtime else {},
     }
-    if s.ytdlp_cookies_file and (cookies := _writable_cookies(s.ytdlp_cookies_file)):
+    # Cookies pasted in the app (stored in the database) win over a cookies file.
+    cookies = ytcookies.current_path() or (
+        _writable_cookies(s.ytdlp_cookies_file) if s.ytdlp_cookies_file else None)
+    if cookies:
         opts["cookiefile"] = cookies
     if s.ffmpeg_location:
         opts["ffmpeg_location"] = s.ffmpeg_location
@@ -236,12 +244,28 @@ _POOL_SIZE = 2
 _pool: "queue.Queue[yt_dlp.YoutubeDL]" = queue.Queue()
 _pool_created = 0
 _pool_lock = threading.Lock()
+_generation = 0        # bumped when cookies change: pooled extractors are rebuilt
+
+
+def reset_pool() -> None:
+    """Drop pooled extractors so the next extraction picks up new cookies."""
+    global _pool_created, _generation
+    with _pool_lock:
+        _generation += 1
+        while True:
+            try:
+                _pool.get_nowait()
+            except queue.Empty:
+                break
+        _pool_created = 0
 
 
 def _youtube_args(fast: bool) -> dict:
     s = get_settings()
     args: dict = {}
-    if fast:
+    # With cookies, let yt-dlp choose its signed-in clients; the fast client
+    # override is for anonymous use.
+    if fast and not ytcookies.current_path():
         clients = [c.strip() for c in s.ytdlp_player_clients.split(",") if c.strip()]
         if clients:
             args["player_client"] = clients
@@ -259,7 +283,9 @@ def _checkout() -> yt_dlp.YoutubeDL:
     with _pool_lock:
         if _pool_created < _POOL_SIZE:
             _pool_created += 1
-            return yt_dlp.YoutubeDL(_base_opts(extractor_args=_youtube_args(fast=True)))
+            ydl = yt_dlp.YoutubeDL(_base_opts(extractor_args=_youtube_args(fast=True)))
+            ydl._wp_generation = _generation
+            return ydl
     return _pool.get()   # all busy: wait for one
 
 
@@ -282,9 +308,17 @@ def _extract_sync(url: str) -> dict:
             with yt_dlp.YoutubeDL(_base_opts(extractor_args=_youtube_args(fast=False))) as slow:
                 info = slow.extract_info(url, download=False)
         except yt_dlp.utils.DownloadError as e2:
-            raise ResolveError(str(e2).replace("ERROR: ", "")) from e2
+            msg = str(e2).replace("ERROR: ", "")
+            if ytcookies.is_bot_check(msg):
+                raise BotCheckError(
+                    "YouTube is blocking this server. Add YouTube cookies in Settings → Fix YouTube playback.") from e2
+            raise ResolveError(msg) from e2
     finally:
-        _pool.put(ydl)
+        if getattr(ydl, "_wp_generation", None) == _generation:
+            _pool.put(ydl)
+        else:
+            with _pool_lock:
+                globals()["_pool_created"] = max(0, _pool_created - 1)
     if not info:
         raise ResolveError("no information returned")
     if info.get("_type") == "playlist":

@@ -160,14 +160,18 @@ YouTube sign-in using a cookies file:
 2. Install the browser extension **"Get cookies.txt LOCALLY"** and allow it in incognito.
 3. While on youtube.com, use the extension to **Export** cookies in Netscape format. This saves a `cookies.txt` file.
 4. Close the private window **without signing out** (signing out invalidates the cookies).
-5. In Render: **wonderplay** service → **Environment** → **Secret Files** → **Add Secret File**
-   - **Filename:** `cookies.txt`
-   - **Contents:** paste the whole file
-   - **Save**, then **Manual Deploy** → **Deploy latest commit**
+5. Open WonderPlay → **Settings** (the gear, or tap your **W** avatar on a phone) →
+   **Fix YouTube playback**:
+   - press **Choose cookies.txt** and pick the file (or paste its contents into the box);
+   - press **Save**. WonderPlay tests YouTube right away and tells you whether it works.
 
-`render.yaml` already points the app at `/etc/secrets/cookies.txt`. Without the file, the app
-simply runs without cookies. Cookies expire every few weeks to months; repeat these steps when
-playback starts failing again.
+The cookies are stored in your database, so they survive restarts and redeploys, even on the
+free plan. Cookies expire every few weeks to months; when songs start failing again, export
+fresh ones and save them the same way.
+
+*(Alternative for advanced users: upload the file as a Render **Secret File** named
+`cookies.txt`; `render.yaml` already points `YTDLP_COOKIES_FILE` at `/etc/secrets/cookies.txt`.
+Cookies saved in Settings take priority.)*
 
 ---
 

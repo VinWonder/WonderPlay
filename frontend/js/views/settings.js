@@ -71,6 +71,83 @@ const extraSelect = (key, label, hint, value, options) => html`
     </select>
   </div>`;
 
+function youtubePanel(yt) {
+  const test = yt.last_test;
+  const status = yt.active
+    ? html`<span class="yt-status ok"><i class="bi bi-check-circle-fill"></i> Cookies saved${yt.updated_at ? ` · ${new Date(yt.updated_at).toLocaleDateString()}` : ''}</span>`
+    : html`<span class="yt-status"><i class="bi bi-exclamation-circle"></i> No cookies: songs may fail with "confirm you're not a bot" on a hosted server</span>`;
+  return html`
+    <section class="panel" id="yt-panel">
+      <h3>Fix YouTube playback</h3>
+      <div class="sub">YouTube asks cloud servers to sign in. Give WonderPlay the cookies of a YouTube session so songs play.</div>
+      <div class="mb-3">${status}</div>
+      ${test ? html`<div class="small mb-3 ${test.ok ? 'text-success' : 'text-danger'}">Last test: ${test.message}</div>` : ''}
+      <details class="yt-steps mb-3">
+        <summary>How to get your YouTube cookies (5 minutes, on a computer)</summary>
+        <ol>
+          <li>Open a <b>private / incognito</b> window and sign in to <b>youtube.com</b>. Use a <b>spare Google account</b>, not your main one.</li>
+          <li>Install the browser extension <b>Get cookies.txt LOCALLY</b> and allow it in private windows.</li>
+          <li>While on youtube.com, open the extension and click <b>Export</b> (Netscape format). You get a <code>cookies.txt</code> file.</li>
+          <li>Close the private window <b>without signing out</b>.</li>
+          <li>Choose that file below (or paste its contents), then press <b>Save</b> and <b>Test</b>.</li>
+        </ol>
+        <p class="small muted mb-0">Cookies expire after a few weeks or months; when songs stop playing, repeat these steps.</p>
+      </details>
+      <textarea class="form-control wp-input mb-2" id="yt-cookies" rows="4" spellcheck="false" autocomplete="off"
+        placeholder="# Netscape HTTP Cookie File&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;…" aria-label="YouTube cookies.txt contents"></textarea>
+      <div class="d-flex gap-2 flex-wrap">
+        <label class="pill-btn mb-0" role="button"><i class="bi bi-file-earmark-arrow-up"></i> Choose cookies.txt
+          <input type="file" id="yt-file" accept=".txt,text/plain" hidden></label>
+        <button class="pill-btn pill-btn-primary" type="button" id="yt-save"><i class="bi bi-check2"></i> Save</button>
+        <button class="pill-btn" type="button" id="yt-test"><i class="bi bi-play-circle"></i> Test</button>
+        ${yt.active ? html`<button class="pill-btn" type="button" id="yt-remove"><i class="bi bi-trash3"></i> Remove</button>` : ''}
+      </div>
+    </section>`;
+}
+
+function wireYoutubePanel(root) {
+  const panel = root.querySelector('#yt-panel');
+  if (!panel) return;
+  const box = panel.querySelector('#yt-cookies');
+  panel.querySelector('#yt-file').addEventListener('change', async (e) => {
+    const f = e.target.files?.[0];
+    if (f) box.value = await f.text();
+  });
+  panel.querySelector('#yt-save').addEventListener('click', async (e) => {
+    if (!box.value.trim()) { toast('Choose your cookies.txt file or paste its contents first'); return; }
+    e.currentTarget.disabled = true;
+    try {
+      await api.put('/api/settings/youtube', { cookies: box.value });
+      box.value = '';
+      toast('Cookies saved. Testing YouTube…');
+      await runTest(panel);
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+    e.currentTarget.disabled = false;
+  });
+  panel.querySelector('#yt-test').addEventListener('click', () => runTest(panel));
+  panel.querySelector('#yt-remove')?.addEventListener('click', async () => {
+    if (!confirm('Remove the saved YouTube cookies?')) return;
+    await api.del('/api/settings/youtube');
+    toast('Cookies removed');
+    render();
+  });
+}
+
+async function runTest(panel) {
+  const btn = panel.querySelector('#yt-test');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Testing…';
+  try {
+    const r = await api.post('/api/settings/youtube/test');
+    toast(r.message, r.ok ? 'info' : 'error', 7000);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+  render();
+}
+
 export async function settingsView({ signal }) {
   const [folders, scan, stats, prefs] = await Promise.all([
     api.get('/api/library/folders', null, { signal }),
@@ -78,6 +155,7 @@ export async function settingsView({ signal }) {
     api.get('/api/library/stats', null, { signal }),
     api.get('/api/preferences', null, { signal }),
   ]);
+  const yt = await api.get('/api/settings/youtube', null, { signal }).catch(() => null);
   const extra = prefs.extra || {};
 
   const statItems = [
@@ -89,6 +167,8 @@ export async function settingsView({ signal }) {
     title: 'Settings',
     html: html`
       <h1 class="page-title">Settings</h1>
+
+      ${yt ? youtubePanel(yt) : ''}
 
       <section class="panel">
         <h3>Library</h3>
@@ -152,6 +232,7 @@ export async function settingsView({ signal }) {
       </section>
     `,
     mount(root, ctx) {
+      wireYoutubePanel(root);
       const statusEl = root.querySelector('#scan-status');
       const buttons = [root.querySelector('#scan-btn'), root.querySelector('#full-scan-btn')];
 

@@ -20,8 +20,8 @@ from .config import get_settings
 from .db import dispose_engine, fetch_val, get_engine
 from . import auth
 from .migrate import migrate
-from .routers import catalog, library, me, playlists, remote, stream
-from .services import resolver
+from .routers import catalog, library, me, playlists, remote, stream, system
+from .services import resolver, ytcookies
 from .services.scanner import ensure_env_folders, scanner
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -47,6 +47,10 @@ async def lifespan(app: FastAPI):
     async with get_engine().begin() as conn:  # fail fast on a bad DATABASE_URL
         await fetch_val(conn, "SELECT 1")
     await ensure_env_folders(s.media_root_list)
+    try:   # YouTube cookies saved from Settings (table exists once migration 03 ran)
+        await ytcookies.load()
+    except Exception as err:  # noqa: BLE001
+        log.info("no saved YouTube cookies loaded: %s", err)
     app.state.warmup = asyncio.create_task(resolver.warm_up())
     if s.scan_on_startup:
         scanner.start()  # incremental: unchanged files are skipped, so this is cheap
@@ -82,6 +86,7 @@ app.include_router(remote.router)
 app.include_router(playlists.router)
 app.include_router(me.router)
 app.include_router(catalog.router)
+app.include_router(system.router)
 
 
 @app.get("/api/health", tags=["meta"])
