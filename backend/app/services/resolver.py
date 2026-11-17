@@ -244,7 +244,7 @@ def clean_metadata(info: dict) -> dict:
 # in order and remember the winner, so later songs go straight to it.
 VIA_WARP, VIA_DIRECT = "warp", "direct"
 VIA_HEADER = "X-WP-Via"       # marks stream URLs that must be fetched without WARP
-FALLBACK_CLIENTS = ("android_vr", "web_embedded", "tv_simply", "mweb")
+FALLBACK_CLIENTS = ("visionos", "web_embedded", "android_vr", "tv_simply", "mweb")
 _PERMANENT = ("private video", "has been removed", "copyright", "members-only",
               "join this channel", "account associated with this video", "live event will begin")
 _ROUTE_BUDGET_S = 75
@@ -252,14 +252,28 @@ _ROUTE_BUDGET_S = 75
 Route = tuple  # (client: str | None, via: str)
 
 
+def _known_clients() -> dict:
+    try:
+        from yt_dlp.extractor.youtube._base import INNERTUBE_CLIENTS
+        return INNERTUBE_CLIENTS
+    except Exception:  # noqa: BLE001 - yt-dlp internals moved: trust the names
+        return {}
+
+
+def _supports_cookies(client: str | None) -> bool:
+    known = _known_clients()
+    return client is None or not known or bool(known.get(client, {}).get("SUPPORTS_COOKIES"))
+
+
 def routes() -> list[Route]:
     """All routes in preference order; a client of None = yt-dlp's own choice."""
     s = get_settings()
+    known = _known_clients()
     clients: list[str | None] = []
     if ytcookies.current_path():
         clients.append(None)                     # signed in: yt-dlp's default clients
     for c in [c.strip() for c in s.ytdlp_player_clients.split(",")] + list(FALLBACK_CLIENTS):
-        if c and c not in clients:
+        if c and c not in clients and (not known or c in known):   # yt-dlp drops retired clients
             clients.append(c)
     if None not in clients:
         clients.append(None)
@@ -287,10 +301,46 @@ def _route_opts(route: Route) -> dict:
         args["player_client"] = [client]
     if s.ytdlp_player_js_variant:
         args["player_js_variant"] = [s.ytdlp_player_js_variant]
-    opts = _base_opts(extractor_args={"youtube": args} if args else {})
+    opts = _base_opts(extractor_args={"youtube": args} if args else {},
+                      no_warnings=False, logger=_Collector())
     if via == VIA_DIRECT:
         opts.pop("proxy", None)
+    if not _supports_cookies(client):
+        # yt-dlp would skip this client if handed cookies; run it signed out instead.
+        opts.pop("cookiefile", None)
     return opts
+
+
+class _Collector:
+    """yt-dlp logger that keeps the warnings of the current extraction, which
+    say *why* YouTube sent no audio (missing token, unsupported client...)."""
+
+    def __init__(self):
+        self.lines: list[str] = []
+
+    def debug(self, msg):
+        pass
+
+    def info(self, msg):
+        pass
+
+    def warning(self, msg):
+        msg = str(msg).replace("WARNING: ", "").strip()
+        if msg and msg not in self.lines:
+            self.lines.append(msg)
+            log.debug("yt-dlp: %s", msg)
+
+    def error(self, msg):
+        pass
+
+    def take(self) -> list[str]:
+        out, self.lines = self.lines[-4:], []
+        return [m[:220] for m in out]
+
+
+def _warnings(ydl) -> list[str]:
+    lg = (getattr(ydl, "params", None) or {}).get("logger")
+    return lg.take() if isinstance(lg, _Collector) else []
 
 
 # Long-lived extractors. yt-dlp keeps YouTube's ~2-3 MB player script in
@@ -391,11 +441,13 @@ def _extract_sync(url: str) -> dict:
     first = getattr(ydl, "_wp_route", None) or _current_preferred()
     try:
         info = _try(ydl, url)
+        _warnings(ydl)
         last_route, last_attempts = first, [{"route": route_name(first), "ok": True}]
         return _tag(info, first[1])
     except yt_dlp.utils.DownloadError as e:
         errors.append(str(e).replace("ERROR: ", ""))
-        attempts.append({"route": route_name(first), "ok": False, "error": errors[-1][:160]})
+        attempts.append({"route": route_name(first), "ok": False, "error": errors[-1][:160],
+                         "warnings": _warnings(ydl)})
     finally:
         _checkin(ydl)
 
@@ -409,12 +461,14 @@ def _extract_sync(url: str) -> dict:
         if time.time() - started > _ROUTE_BUDGET_S:
             break
         log.info("extraction failed for %s on %s; trying %s", url, route_name(first), route_name(route))
+        opts = _route_opts(route)
         try:
-            with yt_dlp.YoutubeDL(_route_opts(route)) as other:
+            with yt_dlp.YoutubeDL(opts) as other:
                 info = _try(other, url)
         except yt_dlp.utils.DownloadError as e:
             errors.append(str(e).replace("ERROR: ", ""))
-            attempts.append({"route": route_name(route), "ok": False, "error": errors[-1][:160]})
+            attempts.append({"route": route_name(route), "ok": False, "error": errors[-1][:160],
+                             "warnings": opts["logger"].take()})
             continue
         attempts.append({"route": route_name(route), "ok": True})
         last_route, last_attempts = route, attempts

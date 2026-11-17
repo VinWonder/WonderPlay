@@ -91,7 +91,8 @@ function youtubePanel(yt) {
         <details class="yt-steps mb-3" ${test.ok ? '' : 'open'}>
           <summary>Connections tried (${test.attempts.length})</summary>
           <ul class="small muted mb-0">${test.attempts.map((a) => html`
-            <li><b class="${a.ok ? 'text-success' : 'text-danger'}">${a.ok ? '✓' : '✗'}</b> ${a.route}${a.error ? html`: ${a.error}` : ''}</li>`)}</ul>
+            <li><b class="${a.ok ? 'text-success' : 'text-danger'}">${a.ok ? '✓' : '✗'}</b> ${a.route}${a.error ? html`: ${a.error}` : ''}
+              ${a.warnings && a.warnings.length ? html`<ul>${a.warnings.map((w) => html`<li>${w}</li>`)}</ul>` : ''}</li>`)}</ul>
         </details>` : ''}
       <button class="pill-btn mb-3" type="button" id="yt-test-top"><i class="bi bi-play-circle"></i> Test</button>
       <details class="yt-steps mb-3" ${test && !test.ok ? 'open' : ''}>

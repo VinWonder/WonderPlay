@@ -39,7 +39,7 @@ services:
       - key: YTDLP_JS_RUNTIME
         value: node
       - key: YTDLP_PLAYER_CLIENTS
-        value: tv_embedded
+        value: tv_samsung
       - key: YTDLP_PLAYER_JS_VARIANT
         value: actual
       # Optional: upload a cookies.txt as a Secret File named cookies.txt

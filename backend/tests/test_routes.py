@@ -45,25 +45,25 @@ def fake(monkeypatch):
 
 def test_routes_try_every_client_on_warp_then_direct(fake):
     rs = resolver.routes()
-    assert rs[0] == ("tv_embedded", "warp")
-    assert rs.index(("android_vr", "warp")) < rs.index(("tv_embedded", "direct"))
+    assert rs[0] == ("tv_samsung", "warp")
+    assert rs.index(("visionos", "warp")) < rs.index(("tv_samsung", "direct"))
     assert (None, "direct") in rs
 
 
 def test_falls_back_to_another_client_and_remembers_it(fake):
-    fake.blocked = {("tv_embedded", "warp")}
+    fake.blocked = {("tv_samsung", "warp")}
     info = resolver._extract_sync("https://youtu.be/x")
-    assert resolver.last_route == ("android_vr", "warp")
+    assert resolver.last_route == ("visionos", "warp")
     assert "X-WP-Via" not in (info["formats"][0].get("http_headers") or {})
     fake.calls.clear()
     resolver._extract_sync("https://youtu.be/y")
-    assert fake.calls == [("android_vr", "warp")]          # sticky: straight to the winner
+    assert fake.calls == [("visionos", "warp")]          # sticky: straight to the winner
 
 
 def test_direct_route_marks_streams_to_skip_warp(fake):
     fake.blocked = {("*", "warp")}
     info = resolver._extract_sync("https://youtu.be/x")
-    assert resolver.last_route == ("tv_embedded", "direct")
+    assert resolver.last_route == ("tv_samsung", "direct")
     assert info["formats"][0]["http_headers"]["X-WP-Via"] == "direct"
     src = resolver.format_to_source(resolver.pick_audio(info["formats"]), "audio")
     assert src["stream_headers"]["X-WP-Via"] == "direct"

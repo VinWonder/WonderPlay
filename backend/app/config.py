@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # JS runtime yt-dlp uses to solve YouTube challenges ("node" or "deno").
     ytdlp_js_runtime: str = "node"
     # YouTube clients tried first (fast path). On failure yt-dlp's defaults are used.
-    ytdlp_player_clients: str = "tv_embedded"
+    ytdlp_player_clients: str = "tv_samsung"
     # "actual" = use the player JS the page really serves. yt-dlp otherwise forces
     # the "main" variant, which some networks throttle to a few KB/s.
     ytdlp_player_js_variant: str = "actual"
